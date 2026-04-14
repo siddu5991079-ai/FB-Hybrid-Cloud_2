@@ -15,8 +15,11 @@ const END_TIME_LIMIT_MS = (5 * 60 * 60 + 50 * 60) * 1000; // 5 hours 50 mins lim
 const TARGET_WEBSITE = process.env.TARGET_URL || "https://bhalocast.com/atoplay.php?v=wextres&hello=m1lko&expires=123456";
 const REFERER = "https://bhalocast.com/";
 
-// 👈 Title Input Read kar raha hai (aur spaces ko '_' se replace kar raha hai)
-const VIDEO_TITLE = (process.env.VIDEO_TITLE || "Live_Match").replace(/\s+/g, '_');
+// Title Input Read kar raha hai aur special characters ko delete karke spaces ko '_' mein badal raha hai
+const VIDEO_TITLE = (process.env.VIDEO_TITLE || "Live_Match")
+    .replace(/[^\w\s-]/g, '') // A-Z, 0-9, spaces aur hyphens ke ilawa sab delete
+    .trim()
+    .replace(/\s+/g, '_');
 
 // 🛡️ PROXY SETTINGS
 const PROXY_IP = process.env.PROXY_IP || '';
@@ -172,8 +175,6 @@ async function main() {
         console.log(`${"-".repeat(50)}`);
 
         const rawLiveClip = `raw_live.mp4`;
-        
-        // 👈 Naya file name logic yahan hai
         const videoName = `${VIDEO_TITLE}_Clip_${clipCounter}_${timeInfo.fileNameTime}_PKT.mp4`; 
 
         const success = processVideo(streamData, rawLiveClip, videoName);
@@ -181,7 +182,8 @@ async function main() {
         if (success) {
             console.log(`\n[🚀 Upload] Video ko GitHub Releases mein daal raha hoon...`);
             try {
-                execSync(`gh release upload Live-Clips ${videoName} --clobber`, { stdio: 'inherit' });
+                // Quotes shamil kar diye gaye hain taake special characters error na karein
+                execSync(`gh release upload Live-Clips "${videoName}" --clobber`, { stdio: 'inherit' });
                 
                 const downloadLink = `https://github.com/${REPO_NAME}/releases/download/Live-Clips/${videoName}`;
                 
