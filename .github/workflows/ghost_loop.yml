@@ -1,4 +1,3 @@
-
 name: GitHub Releases Video Factory
 
 on:
@@ -42,13 +41,12 @@ jobs:
         GITHUB_REPOSITORY: ${{ github.repository }}
         
         TARGET_URL: ${{ inputs.target_url }}
-        VIDEO_TITLE: ${{ inputs.video_title }} # 👈 Naya Title Input yahan se jayega
+        VIDEO_TITLE: ${{ inputs.video_title }}
         PROXY_IP: '31.59.20.176'
         PROXY_PORT: '6754'
         PROXY_USER: 'dgmtstlf'
         PROXY_PASS: 'pm4wnuro0gy9'
       run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" node ghost_bot.js
-
 
 
 
