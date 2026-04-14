@@ -1,29 +1,17 @@
-name: File.io Proxy Factory
+name: Pure GitHub Factory
 
 on:
   workflow_dispatch:
     inputs:
-      titles_list:
-        description: 'Titles Array (Separate with ,,)'
-        required: true
-        default: 'Live Match Today,,Watch Full Match DC vs GT'
-      descs_list:
-        description: 'Descriptions Array (Separate with ,,)'
-        required: true
-        default: 'Watch the live action here without buffer,,Click the link to watch!'
-      hashtags:
-        description: 'Hashtags (Space separated)'
-        required: true
-        default: '#CricketLive #MatchToday #IPL2026'
       target_url:
         description: 'Target Website URL'
         required: true
-        default: 'https://dadocric.st/player.php?id=willow'
+        default: 'https://bhalocast.com/atoplay.php?v=wextres&hello=m1lko&expires=123456'
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 360 # 6 Hours Limit
+    timeout-minutes: 60 # 1 Ghante ki limit (Kyunke action foran band hoga video dene ke liye)
 
     steps:
     - name: Checkout Code
@@ -40,25 +28,115 @@ jobs:
         node-version: '18'
 
     - name: Install Node Libraries
-      run: npm install puppeteer axios form-data
+      run: npm install puppeteer
 
     - name: Start The Factory
       env:
-        GH_PAT: ${{ secrets.GH_PAT }}
-        TITLES_LIST: ${{ inputs.titles_list }}
-        DESCS_LIST: ${{ inputs.descs_list }}
-        HASHTAGS: ${{ inputs.hashtags }}
         TARGET_URL: ${{ inputs.target_url }}
-        GITHUB_REPOSITORY: ${{ github.repository }}
-        GITHUB_REF_NAME: ${{ github.ref_name }}
-        
         # 🛡️ PROXY SECRETS INJECTED HERE
         PROXY_IP: '31.59.20.176'
         PROXY_PORT: '6754'
-        PROXY_USER: 'dgmtstlf'
-        PROXY_PASS: 'pm4wnuro0gy9'
-        
+        PROXY_USER: 'ehhppbec'
+        PROXY_PASS: '5f69y4wngj70'
       run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" node ghost_bot.js
+
+    # 📦 YEH STEP VIDEO KO GITHUB PAR SAFE KAREGA (1 DIN KE LIYE)
+    - name: Make Video Available for Download
+      if: always() 
+      uses: actions/upload-artifact@v4
+      with:
+        name: Final_Cricket_Video
+        path: artifacts/*.mp4
+        retention-days: 1 # Sirf 1 din ke liye save rakhega, phir HAMESHA ke liye permanent delete.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# name: File.io Proxy Factory
+
+# on:
+#   workflow_dispatch:
+#     inputs:
+#       titles_list:
+#         description: 'Titles Array (Separate with ,,)'
+#         required: true
+#         default: 'Live Match Today,,Watch Full Match DC vs GT'
+#       descs_list:
+#         description: 'Descriptions Array (Separate with ,,)'
+#         required: true
+#         default: 'Watch the live action here without buffer,,Click the link to watch!'
+#       hashtags:
+#         description: 'Hashtags (Space separated)'
+#         required: true
+#         default: '#CricketLive #MatchToday #IPL2026'
+#       target_url:
+#         description: 'Target Website URL'
+#         required: true
+#         default: 'https://dadocric.st/player.php?id=willow'
+
+# jobs:
+#   run-bot:
+#     runs-on: ubuntu-latest
+#     timeout-minutes: 360 # 6 Hours Limit
+
+#     steps:
+#     - name: Checkout Code
+#       uses: actions/checkout@v3
+
+#     - name: Install System Tools (FFmpeg & Chrome)
+#       run: |
+#         sudo apt-get update
+#         sudo apt-get install -y ffmpeg google-chrome-stable xvfb
+
+#     - name: Setup Node.js
+#       uses: actions/setup-node@v3
+#       with:
+#         node-version: '18'
+
+#     - name: Install Node Libraries
+#       run: npm install puppeteer axios form-data
+
+#     - name: Start The Factory
+#       env:
+#         GH_PAT: ${{ secrets.GH_PAT }}
+#         TITLES_LIST: ${{ inputs.titles_list }}
+#         DESCS_LIST: ${{ inputs.descs_list }}
+#         HASHTAGS: ${{ inputs.hashtags }}
+#         TARGET_URL: ${{ inputs.target_url }}
+#         GITHUB_REPOSITORY: ${{ github.repository }}
+#         GITHUB_REF_NAME: ${{ github.ref_name }}
+        
+#         # 🛡️ PROXY SECRETS INJECTED HERE
+#         PROXY_IP: '31.59.20.176'
+#         PROXY_PORT: '6754'
+#         PROXY_USER: 'dgmtstlf'
+#         PROXY_PASS: 'pm4wnuro0gy9'
+        
+#       run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" node ghost_bot.js
 
 
 
