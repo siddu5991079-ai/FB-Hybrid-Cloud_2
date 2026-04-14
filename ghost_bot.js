@@ -185,7 +185,7 @@ function processVideo(data, rawLiveClip, finalMergedVideo) {
 // ==========================================
 
 // ==========================================
-// 📤 GHOST BRIDGE (FAST CLOUD UPLOADER - 412 ERROR FIXED)
+// 📤 GHOST BRIDGE (FAST CLOUD UPLOADER - FINAL 412 FIX)
 // ==========================================
 async function sendViaGhostBridge(videoPath, caption) {
     console.log(`\n[✈️ Ghost Bridge] Video ko secure cloud (Catbox) par bhej rahe hain...`);
@@ -193,8 +193,7 @@ async function sendViaGhostBridge(videoPath, caption) {
         const form = new FormData();
         form.append('reqtype', 'fileupload');
         
-        // 🛠️ FIX 1: Stream ke bajaye file ko Buffer mein read kar rahe hain
-        // Is se 'chunked' upload ka masla khatam ho jayega aur Catbox khushi se file accept karega
+        // File ko Buffer mein read karein
         const fileBuffer = fs.readFileSync(videoPath);
         form.append('fileToUpload', fileBuffer, {
             filename: 'ready_clip.mp4',
@@ -204,8 +203,11 @@ async function sendViaGhostBridge(videoPath, caption) {
         console.log(`  [>] Uploading to Catbox.moe... (Please wait)`);
         
         const headers = form.getHeaders();
-        // 🛠️ FIX 2: Cloudflare ko dhoka dene ke liye Chrome Browser ka User-Agent laga diya
         headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+        
+        // 🛠️ YEH HAI MASTER FIX: 
+        // Axios ko file ka mukammal size batana zaroori hai, warna wo "chunked" upload karta hai jo Catbox block kar deta hai.
+        headers['Content-Length'] = form.getLengthSync();
 
         const res = await axios.post("https://catbox.moe/user/api.php", form, { 
             headers: headers,
@@ -231,7 +233,6 @@ async function sendViaGhostBridge(videoPath, caption) {
         }
     } catch (e) {
         console.log(`  [❌] Ghost Bridge Error: ${e.message}`);
-        // 📸 Agar future mein koi aur error aaye toh uski detailed waja bhi print karega
         if (e.response) {
             console.log(`  [🔍] API Error Details: ${e.response.status} - ${e.response.statusText}`);
         }
