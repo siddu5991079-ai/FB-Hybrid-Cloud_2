@@ -18,7 +18,7 @@ on:
       target_url:
         description: 'Target Website URL'
         required: true
-        default: 'https://bhalocast.com/atoplay.php?v=wextres&hello=m1lko&expires=123456'
+        default: 'https://dadocric.st/player.php?id=willow'
 
 jobs:
   run-bot:
