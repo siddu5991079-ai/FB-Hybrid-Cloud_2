@@ -202,21 +202,29 @@ function processVideo(data, rawLiveClip, finalMergedVideo) {
 // ==========================================
 // 📤 FILE.IO (DIRECT LINK & AUTO-DELETE SYSTEM)
 // ==========================================
+// ==========================================
+// 📤 FILE.IO (ULTIMATE CURL UPLOADER - 100% FIX)
+// ==========================================
 async function uploadAndPrintLink(videoPath, caption, clipCounter) {
     console.log(`\n[🚀 Upload] Video ko File.io (Auto-Delete Server) par bhej raha hoon...`);
     try {
-        const form = new FormData();
-        form.append('file', fs.createReadStream(videoPath));
+        console.log(`  [>] Uploading via CURL Bypass... (Please wait)`);
+        
+        // 🛠️ FIX: Axios ko hata kar CURL use kar rahe hain taake HTML error na aaye
+        const curlCmd = `curl -s -F "file=@${videoPath}" https://file.io`;
+        const responseText = execSync(curlCmd, { encoding: 'utf8' }).trim();
+        
+        // Response ko JSON mein convert karna
+        let resData;
+        try {
+            resData = JSON.parse(responseText);
+        } catch (err) {
+            console.log(`  [❌] File.io ne JSON ke bajaye kuch aur bhej diya:`, responseText.substring(0, 200));
+            return false;
+        }
 
-        console.log(`  [>] Uploading... (Please wait)`);
-        const res = await axios.post("https://file.io", form, {
-            headers: form.getHeaders(),
-            maxBodyLength: Infinity,
-            maxContentLength: Infinity
-        });
-
-        if (res.data && res.data.success) {
-            const downloadLink = res.data.link;
+        if (resData && resData.success) {
+            const downloadLink = resData.link;
 
             console.log(`\n=========================================================`);
             console.log(`🎉 VIDEO #${clipCounter} IS READY!`);
@@ -235,7 +243,7 @@ async function uploadAndPrintLink(videoPath, caption, clipCounter) {
 
             return true;
         } else {
-            console.log(`  [❌] File.io Upload Failed. Response:`, res.data);
+            console.log(`  [❌] File.io Upload Failed. JSON Response:`, resData);
             return false;
         }
     } catch (e) {
