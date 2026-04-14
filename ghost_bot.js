@@ -183,16 +183,32 @@ function processVideo(data, rawLiveClip, finalMergedVideo) {
 // ==========================================
 // 📤 GHOST BRIDGE (FAST CLOUD UPLOADER)
 // ==========================================
+
+// ==========================================
+// 📤 GHOST BRIDGE (FAST CLOUD UPLOADER - 412 ERROR FIXED)
+// ==========================================
 async function sendViaGhostBridge(videoPath, caption) {
     console.log(`\n[✈️ Ghost Bridge] Video ko secure cloud (Catbox) par bhej rahe hain...`);
     try {
         const form = new FormData();
         form.append('reqtype', 'fileupload');
-        form.append('fileToUpload', fs.createReadStream(videoPath));
+        
+        // 🛠️ FIX 1: Stream ke bajaye file ko Buffer mein read kar rahe hain
+        // Is se 'chunked' upload ka masla khatam ho jayega aur Catbox khushi se file accept karega
+        const fileBuffer = fs.readFileSync(videoPath);
+        form.append('fileToUpload', fileBuffer, {
+            filename: 'ready_clip.mp4',
+            contentType: 'video/mp4'
+        });
 
         console.log(`  [>] Uploading to Catbox.moe... (Please wait)`);
+        
+        const headers = form.getHeaders();
+        // 🛠️ FIX 2: Cloudflare ko dhoka dene ke liye Chrome Browser ka User-Agent laga diya
+        headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
         const res = await axios.post("https://catbox.moe/user/api.php", form, { 
-            headers: form.getHeaders(),
+            headers: headers,
             maxBodyLength: Infinity,
             maxContentLength: Infinity
         });
@@ -215,9 +231,54 @@ async function sendViaGhostBridge(videoPath, caption) {
         }
     } catch (e) {
         console.log(`  [❌] Ghost Bridge Error: ${e.message}`);
+        // 📸 Agar future mein koi aur error aaye toh uski detailed waja bhi print karega
+        if (e.response) {
+            console.log(`  [🔍] API Error Details: ${e.response.status} - ${e.response.statusText}`);
+        }
         return false;
     }
 }
+
+
+
+
+
+
+// async function sendViaGhostBridge(videoPath, caption) {
+//     console.log(`\n[✈️ Ghost Bridge] Video ko secure cloud (Catbox) par bhej rahe hain...`);
+//     try {
+//         const form = new FormData();
+//         form.append('reqtype', 'fileupload');
+//         form.append('fileToUpload', fs.createReadStream(videoPath));
+
+//         console.log(`  [>] Uploading to Catbox.moe... (Please wait)`);
+//         const res = await axios.post("https://catbox.moe/user/api.php", form, { 
+//             headers: form.getHeaders(),
+//             maxBodyLength: Infinity,
+//             maxContentLength: Infinity
+//         });
+
+//         if (res.status === 200 && res.data.includes("catbox.moe")) {
+//             const videoUrl = res.data.trim();
+//             console.log(`  [✅] Cloud Link Ready: ${videoUrl}`);
+
+//             console.log(`  [>] Local PC ko signal bhej rahe hain (Ntfy.sh)...`);
+//             const message = `${videoUrl}|--|${caption}`;
+            
+//             await axios.post(`https://ntfy.sh/${BRIDGE_ID}`, message, {
+//                 headers: { 'Content-Type': 'text/plain' }
+//             });
+//             console.log(`  [✅] Signal Successfully Bhej Diya Gaya!`);
+//             return true;
+//         } else {
+//             console.log(`  [❌] Cloud Upload Failed. Response: ${res.data}`);
+//             return false;
+//         }
+//     } catch (e) {
+//         console.log(`  [❌] Ghost Bridge Error: ${e.message}`);
+//         return false;
+//     }
+// }
 
 // ==========================================
 // 🔄 GITHUB AUTO-RESTART
