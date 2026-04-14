@@ -12,10 +12,14 @@ on:
         required: true
         default: 'Live_Match'
 
+# 👈 YEH NAYI LINE HAI: Is se GitHub Action ko video upload karne ki permission mil jayegi
+permissions:
+  contents: write
+
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 360 # 6 ghante ka loop chalta rahega
+    timeout-minutes: 360
 
     steps:
     - name: Checkout Code
@@ -36,8 +40,8 @@ jobs:
 
     - name: Start The Factory
       env:
-        # 🔑 YEH TOKEN ZAROORI HAI GITHUB RELEASES KE LIYE
-        GH_PAT: ${{ secrets.GH_PAT }}
+        # 👈 NAYA UPDATE: Ab kisi external Token ki zaroorat nahi, yeh auto-work karega
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         GITHUB_REPOSITORY: ${{ github.repository }}
         
         TARGET_URL: ${{ inputs.target_url }}
@@ -47,6 +51,67 @@ jobs:
         PROXY_USER: 'dgmtstlf'
         PROXY_PASS: 'pm4wnuro0gy9'
       run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" node ghost_bot.js
+
+
+
+
+
+
+
+
+
+
+
+
+# name: GitHub Releases Video Factory
+
+# on:
+#   workflow_dispatch:
+#     inputs:
+#       target_url:
+#         description: 'Target Website URL'
+#         required: true
+#         default: 'https://dadocric.st/player.php?id=willowextra'
+#       video_title:
+#         description: 'Video ka Title (e.g., PSL_Final ya India_vs_Pak)'
+#         required: true
+#         default: 'Live_Match'
+
+# jobs:
+#   run-bot:
+#     runs-on: ubuntu-latest
+#     timeout-minutes: 360 # 6 ghante ka loop chalta rahega
+
+#     steps:
+#     - name: Checkout Code
+#       uses: actions/checkout@v3
+
+#     - name: Install System Tools (FFmpeg & Chrome)
+#       run: |
+#         sudo apt-get update
+#         sudo apt-get install -y ffmpeg google-chrome-stable xvfb
+
+#     - name: Setup Node.js
+#       uses: actions/setup-node@v3
+#       with:
+#         node-version: '18'
+
+#     - name: Install Node Libraries
+#       run: npm install puppeteer
+
+#     - name: Start The Factory
+#       env:
+#         # 🔑 YEH TOKEN ZAROORI HAI GITHUB RELEASES KE LIYE
+#         GH_PAT: ${{ secrets.GH_PAT }}
+#         GITHUB_REPOSITORY: ${{ github.repository }}
+        
+#         TARGET_URL: ${{ inputs.target_url }}
+#         VIDEO_TITLE: ${{ inputs.video_title }}
+#         PROXY_IP: '31.59.20.176'
+#         PROXY_PORT: '6754'
+#         PROXY_USER: 'dgmtstlf'
+#         PROXY_PASS: 'pm4wnuro0gy9'
+#       run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" node ghost_bot.js
 
 
 
