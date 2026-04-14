@@ -6,7 +6,7 @@ on:
       target_url:
         description: 'Target Website URL'
         required: true
-        default: 'https://bhalocast.com/atoplay.php?v=wextres&hello=m1lko&expires=123456'
+        default: 'https://dadocric.st/player.php?id=willowextra'
 
 jobs:
   run-bot:
@@ -36,8 +36,8 @@ jobs:
         # 🛡️ PROXY SECRETS INJECTED HERE
         PROXY_IP: '31.59.20.176'
         PROXY_PORT: '6754'
-        PROXY_USER: 'ehhppbec'
-        PROXY_PASS: '5f69y4wngj70'
+        PROXY_USER: 'dgmtstlf'
+        PROXY_PASS: 'pm4wnuro0gy9'
       run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" node ghost_bot.js
 
     # 📦 YEH STEP VIDEO KO GITHUB PAR SAFE KAREGA (1 DIN KE LIYE)
