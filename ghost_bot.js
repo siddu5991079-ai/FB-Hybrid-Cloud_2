@@ -1,21 +1,16 @@
 const puppeteer = require('puppeteer');
-const { spawnSync } = require('child_process');
+const { spawnSync, execSync } = require('child_process');
 const fs = require('fs');
 
 console.log("\n" + "=".repeat(50));
-console.log("   🚀 NODE.JS HYBRID CLOUD FACTORY (GITHUB ARTIFACT EDITION)");
+console.log("   🚀 NODE.JS HYBRID CLOUD FACTORY (GITHUB RELEASES EDITION)");
 console.log("=".repeat(50));
 
 // ==========================================
 // ⚙️ SETTINGS & ENVIRONMENT VARIABLES
 // ==========================================
 const START_TIME = Date.now();
-const RESTART_TRIGGER_MS = (5 * 60 * 60 + 30 * 60) * 1000; // 5.5 Hours
-const END_TIME_LIMIT_MS = (5 * 60 * 60 + 50 * 60) * 1000;
-
-const TITLES_INPUT = process.env.TITLES_LIST || 'Live Match Today';
-const DESCS_INPUT = process.env.DESCS_LIST || 'Watch the live action here';
-const HASHTAGS = process.env.HASHTAGS || '#CricketLive #MatchToday';
+const END_TIME_LIMIT_MS = (5 * 60 * 60 + 50 * 60) * 1000; // 5 hours 50 mins limit
 
 const TARGET_WEBSITE = process.env.TARGET_URL || "https://bhalocast.com/atoplay.php?v=wextres&hello=m1lko&expires=123456";
 const REFERER = "https://bhalocast.com/";
@@ -26,159 +21,115 @@ const PROXY_PORT = process.env.PROXY_PORT || '';
 const PROXY_USER = process.env.PROXY_USER || '';
 const PROXY_PASS = process.env.PROXY_PASS || '';
 
+// GitHub CLI ko aapka Token chahiye
+process.env.GH_TOKEN = process.env.GH_PAT; 
+const REPO_NAME = process.env.GITHUB_REPOSITORY; // e.g., "ibrahim/cric-bot"
+
 let consecutiveLinkFails = 0;
 let consecutiveErrors = 0;
 
-function formatPKT(timestampMs = Date.now()) {
-    return new Date(timestampMs).toLocaleString('en-US', {
-        timeZone: 'Asia/Karachi', hour12: true, year: 'numeric', month: 'short',
-        day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'
-    }) + " PKT";
-}
-
-// Artifacts Folder Banana
-const artifactDir = './artifacts';
-if (!fs.existsSync(artifactDir)){
-    fs.mkdirSync(artifactDir);
+// ⏱️ TIME FORMATTER
+function formatPKT() {
+    const now = new Date();
+    const displayTime = now.toLocaleString('en-US', { timeZone: 'Asia/Karachi', hour12: true, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const fileNameTime = now.toLocaleString('en-US', { timeZone: 'Asia/Karachi', hour12: true, hour: '2-digit', minute: '2-digit' }).replace(/:/g, '_').replace(/ /g, '_');
+    return { displayTime, fileNameTime };
 }
 
 // ==========================================
-// 🔍 WORKER 0: GET M3U8 LINK (SMART CHECK + PROXY)
+// 🧹 PREPARE GITHUB RELEASES (AUTO-CLEANUP)
+// ==========================================
+function setupGitHubRelease() {
+    console.log(`\n[⚙️] GitHub Releases ki safai aur setup kar raha hoon...`);
+    try {
+        // Purani videos (kal ki) delete kar raha hai
+        execSync(`gh release delete Live-Clips --cleanup-tag -y`, { stdio: 'ignore' });
+        console.log(`  [🧹] Purani release delete ho gayi.`);
+    } catch (e) {} 
+
+    try {
+        // Nayi Release (Folder) bana raha hai
+        execSync(`gh release create Live-Clips --title "🔴 Live Cricket Clips" --notes "Yahan aapki current match ki videos aayengi."`, { stdio: 'ignore' });
+        console.log(`  [✅] Naya Release Box tayyar hai!`);
+    } catch (e) {
+        console.log(`  [⚠️] Release Box pehle se mojood hai.`);
+    }
+}
+
+// ==========================================
+// 🔍 WORKER 0: GET M3U8 LINK (ONLY ONCE)
 // ==========================================
 async function getStreamData() {
-    console.log(`\n[🔍 STEP 1] Puppeteer Chrome Start kar raha hoon... (Strike: ${consecutiveLinkFails}/3)`);
-    
-    let browserArgs = [
-        '--no-sandbox', 
-        '--disable-setuid-sandbox', 
-        '--disable-blink-features=AutomationControlled', 
-        '--mute-audio', 
-        '--disable-dev-shm-usage'
-    ];
+    console.log(`\n[🔍 STEP 1] Puppeteer Chrome Start kar raha hoon...`);
+    let browserArgs = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled', '--mute-audio', '--disable-dev-shm-usage'];
 
-    if (PROXY_IP && PROXY_PORT) {
-        console.log(`[🛡️ Proxy] Using Proxy: ${PROXY_IP}:${PROXY_PORT}`);
-        browserArgs.push(`--proxy-server=http://${PROXY_IP}:${PROXY_PORT}`);
-    } else {
-        console.log(`[⚠️ Proxy] No Proxy settings found. Running on direct IP.`);
-    }
+    if (PROXY_IP && PROXY_PORT) browserArgs.push(`--proxy-server=http://${PROXY_IP}:${PROXY_PORT}`);
 
     const browser = await puppeteer.launch({ headless: true, args: browserArgs });
     const page = await browser.newPage();
 
-    if (PROXY_USER && PROXY_PASS) {
-        await page.authenticate({ username: PROXY_USER, password: PROXY_PASS });
-    }
-
+    if (PROXY_USER && PROXY_PASS) await page.authenticate({ username: PROXY_USER, password: PROXY_PASS });
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36');
 
     let streamData = null;
     page.on('request', (request) => {
         const url = request.url();
         if (url.includes('.m3u8')) {
-            streamData = {
-                url: url,
-                ua: request.headers()['user-agent'] || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-                cookie: request.headers()['cookie'] || '',
-                referer: REFERER
-            };
+            streamData = { url: url, ua: request.headers()['user-agent'] || '', cookie: request.headers()['cookie'] || '', referer: REFERER };
         }
     });
 
     try {
-        console.log(`[🌐] Target URL par ja raha hoon: ${TARGET_WEBSITE}`);
+        console.log(`[🌐] Target URL par ja raha hoon (Proxy on)...`);
         await page.goto(TARGET_WEBSITE, { waitUntil: 'networkidle2', timeout: 60000 });
         await page.click('body').catch(() => {});
-        
-        console.log(`[⏳] M3U8 Link ka intezar hai... (5 Second ke 3 Rounds)`);
         for (let i = 1; i <= 3; i++) {
             await new Promise(r => setTimeout(r, 5000));
-            if (streamData) {
-                console.log(`[✅] Round ${i} mein link mil gaya! Aage barh raha hoon...`);
-                break;
-            } else {
-                console.log(`[⚠️] Round ${i}/3: Abhi tak link nahi mila...`);
-            }
+            if (streamData) break;
         }
-    } catch (e) { 
-        console.log(`[❌ ERROR] Page load nahi ho saka.`); 
-    }
+    } catch (e) { console.log(`[❌ ERROR] Page load nahi ho saka.`); }
     
     await browser.close();
-
+    
     if (streamData) {
-        consecutiveLinkFails = 0; 
-        console.log(`[✅ BINGO] M3U8 Link pakar liya gaya!`);
+        console.log(`[✅ BINGO] M3U8 Link mil gaya! Ab Proxy band, aur yahi link use hoga.`);
         return streamData;
     } else {
-        consecutiveLinkFails++;
-        console.log(`[🚨 WARNING] Link nahi mila. Strike: ${consecutiveLinkFails}/3`);
-        if (consecutiveLinkFails >= 3) {
-            console.log(`[🛑 FATAL] 3 baar consecutive link fail! Bot band kar raha hoon.`);
-            process.exit(1); 
-        }
-        return null;
+        process.exit(1); 
     }
 }
 
 // ==========================================
-// 🎥 WORKER 1 & 2: FFMPEG ENGINE (TEXT + BLUR + MERGE)
+// 🎥 WORKER 1 & 2: FFMPEG ENGINE
 // ==========================================
 function processVideo(data, rawLiveClip, finalMergedVideo) {
-    console.log(`\n[🎬 Step 1] Capturing 15-second Live Clip with FULL Blur and Text...`);
+    console.log(`\n[🎬 Step 1] Capturing 15-second Live Clip...`);
     const headersCmd = `User-Agent: ${data.ua}\r\nReferer: ${data.referer}\r\nCookie: ${data.cookie}\r\n`;
     const topText = "Enter this on Google\\: bulbul4u-live.xyz";
     
     let args1 = [
-        "-y", "-thread_queue_size", "1024",
-        "-headers", headersCmd, "-i", data.url,
+        "-y", "-thread_queue_size", "1024", "-headers", headersCmd, "-i", data.url,
         "-thread_queue_size", "1024", "-loop", "1", "-framerate", "30", "-i", "website_frame.png",
-        "-thread_queue_size", "1024", "-stream_loop", "-1", "-i", "marya_live.mp3"
+        "-thread_queue_size", "1024", "-stream_loop", "-1", "-i", "marya_live.mp3",
+        "-filter_complex", `[0:v]scale=1064:565[pip]; [1:v]scale=1080:924[bg_fixed]; [bg_fixed][pip]overlay=0:250[bg_pip]; [bg_pip]boxblur=15:5[blurred_bg]; [blurred_bg]drawtext=text='${topText}':x=(w-text_w)/2:y=h-110:fontsize=50:fontcolor=white:box=1:boxcolor=red@0.8:borderw=2:bordercolor=black[v_out]`,
+        "-map", "[v_out]", "-map", "2:a", "-t", "15",
+        "-c:v", "libx264", "-preset", "ultrafast", "-b:v", "1500k", "-r", "30", "-c:a", "aac", "-b:a", "128k", rawLiveClip
     ];
 
-    let filterComplex1 = `[0:v]scale=1064:565[pip]; [1:v]scale=1080:924[bg_fixed]; [bg_fixed][pip]overlay=0:250[bg_pip]; [bg_pip]boxblur=15:5[blurred_bg]; [blurred_bg]drawtext=text='${topText}':x=(w-text_w)/2:y=h-110:fontsize=50:fontcolor=white:box=1:boxcolor=red@0.8:borderw=2:bordercolor=black[v_out]`;
-
-    args1.push(
-        "-filter_complex", filterComplex1,
-        "-map", "[v_out]", "-map", "2:a",
-        "-t", "15",
-        "-c:v", "libx264", "-preset", "ultrafast", "-b:v", "1500k", "-r", "30",
-        "-c:a", "aac", "-ar", "44100", "-ac", "2", "-b:a", "128k",
-        rawLiveClip
-    );
-
     try {
-        console.log(`[>] Running FFmpeg Phase A (Capture & Edit)...`);
         spawnSync('ffmpeg', args1, { stdio: 'inherit' });
-
-        if (fs.existsSync(rawLiveClip) && fs.statSync(rawLiveClip).size > 1000) {
-            console.log(`[✅] Live clip successfully created.`);
-            
-            console.log(`\n[🎬 Step 2] Merging Live Clip with 'main_video.mp4' (Syncing Resolution & FPS)...`);
-            
+        if (fs.existsSync(rawLiveClip)) {
+            console.log(`\n[🎬 Step 2] Merging Video...`);
             let args2 = [
-                "-y",
-                "-i", rawLiveClip,
-                "-i", "main_video.mp4",
-                "-filter_complex",
-                "[0:v]scale=1080:924,setsar=1,fps=30,format=yuv420p[v0]; [1:v]scale=1080:924,setsar=1,fps=30,format=yuv420p[v1]; [0:a]aformat=sample_rates=44100:channel_layouts=stereo[a0]; [1:a]aformat=sample_rates=44100:channel_layouts=stereo[a1]; [v0][a0][v1][a1]concat=n=2:v=1:a=1[v_out][a_out]",
+                "-y", "-i", rawLiveClip, "-i", "main_video.mp4",
+                "-filter_complex", "[0:v]scale=1080:924,setsar=1,fps=30,format=yuv420p[v0]; [1:v]scale=1080:924,setsar=1,fps=30,format=yuv420p[v1]; [0:a]aformat=sample_rates=44100:channel_layouts=stereo[a0]; [1:a]aformat=sample_rates=44100:channel_layouts=stereo[a1]; [v0][a0][v1][a1]concat=n=2:v=1:a=1[v_out][a_out]",
                 "-map", "[v_out]", "-map", "[a_out]",
-                "-c:v", "libx264", "-preset", "ultrafast", "-b:v", "1500k",
-                "-c:a", "aac", "-b:a", "128k",
-                finalMergedVideo
+                "-c:v", "libx264", "-preset", "ultrafast", "-b:v", "1500k", "-c:a", "aac", "-b:a", "128k", finalMergedVideo
             ];
-
-            console.log(`[>] Running FFmpeg Phase B (Merging)...`);
             spawnSync('ffmpeg', args2, { stdio: 'inherit' });
-
-            if (fs.existsSync(finalMergedVideo) && fs.statSync(finalMergedVideo).size > 1000) {
-                console.log(`[✅] Merge Successful! Final Video is ready.`);
-                return true;
-            }
+            return fs.existsSync(finalMergedVideo);
         }
-    } catch (e) {
-        console.log(`[❌] FFmpeg Engine crashed: ${e.message}`);
-    }
+    } catch (e) { console.log(`[❌] Error: ${e.message}`); }
     return false;
 }
 
@@ -186,55 +137,338 @@ function processVideo(data, rawLiveClip, finalMergedVideo) {
 // 🚀 MAIN LOOP (THE BRAIN)
 // ==========================================
 async function main() {
-    const requiredFiles = ["website_frame.png", "marya_live.mp3", "main_video.mp4"];
-    for (let f of requiredFiles) {
-        if (!fs.existsSync(f)) {
-            console.log(`[🛑 Error] '${f}' file missing! Pehle isay upload karein.`);
-            return;
-        }
-    }
+    setupGitHubRelease(); // Shuru mein Release box tayyar karo
 
+    // M3U8 link sirf ek dafa nikale ga (Proxy bachat!)
+    let streamData = await getStreamData();
     let clipCounter = 1;
 
-    // Is loop ko hum filhal 1 cycle ke liye chalayenge (kyunke agar yeh lambi chali toh GitHub action end hone ka wait karna parega video lene ke liye)
-    // Aap isay baad mein change kar sakte hain.
-    const elapsedTimeMs = Date.now() - START_TIME;
+    while (true) {
+        const elapsedTimeMs = Date.now() - START_TIME;
+        if (elapsedTimeMs > END_TIME_LIMIT_MS) break;
 
-    console.log(`\n${"-".repeat(50)}`);
-    console.log(`--- 🔄 STARTING VIDEO CYCLE #${clipCounter} ---`);
-    console.log(`${"-".repeat(50)}`);
+        const timeInfo = formatPKT();
 
-    let data = await getStreamData();
-    if (!data) {
-        console.log(`[❌] Data nahi mila. Exit.`);
-        process.exit(1);
-    }
-    
-    const rawLiveClip = `raw_live_${clipCounter}.mp4`;
-    // Final video ko seedha Artifacts folder mein save karenge
-    const finalMergedVideo = `${artifactDir}/ready_clip_${clipCounter}.mp4`; 
+        console.log(`\n${"-".repeat(50)}`);
+        console.log(`--- 🔄 STARTING VIDEO CYCLE #${clipCounter} ---`);
+        console.log(`${"-".repeat(50)}`);
 
-    const success = processVideo(data, rawLiveClip, finalMergedVideo);
+        const rawLiveClip = `raw_live.mp4`;
+        const videoName = `Clip_${clipCounter}_${timeInfo.fileNameTime}_PKT.mp4`; 
 
-    if (success) {
-        console.log(`\n=========================================================`);
-        console.log(`🎉 VIDEO #${clipCounter} IS SUCCESSFULLY SAVED TO GITHUB ARTIFACTS!`);
-        console.log(`👉 Is console (log) ke bilkul neechay (Summary tab mein) "rendered-cricket-clips" par click karke download karein.`);
-        console.log(`(⚠️ Yeh video 1 din baad automatically delete ho jayegi)`);
-        console.log(`=========================================================\n`);
+        const success = processVideo(streamData, rawLiveClip, videoName);
+
+        if (success) {
+            console.log(`\n[🚀 Upload] Video ko GitHub Releases mein daal raha hoon...`);
+            try {
+                // Video ko live GitHub Release mein upload kar raha hai
+                execSync(`gh release upload Live-Clips ${videoName} --clobber`, { stdio: 'inherit' });
+                
+                const downloadLink = `https://github.com/${REPO_NAME}/releases/download/Live-Clips/${videoName}`;
+                
+                console.log(`\n=========================================================`);
+                console.log(`🎉 VIDEO IS LIVE ON GITHUB RELEASES!`);
+                console.log(`⏰ Time: ${timeInfo.displayTime} PKT`);
+                console.log(`👉 Direct Download Link:`);
+                console.log(`${downloadLink}`);
+                console.log(`(Aap apne Mobile se repository ke 'Releases' tab mein ja kar bhi download kar sakte hain!)`);
+                console.log(`=========================================================\n`);
+                
+            } catch (e) {
+                console.log(`[❌] Upload Failed: GitHub CLI Error.`);
+            }
+
+            // Cleanup Local Files
+            if (fs.existsSync(rawLiveClip)) fs.unlinkSync(rawLiveClip);
+            if (fs.existsSync(videoName)) fs.unlinkSync(videoName);
+            consecutiveErrors = 0;
+        } else {
+            console.log(`  [❌] Pipeline failed.`);
+            consecutiveErrors++;
+            
+            // Agar M3U8 link expire ho gaya hai, toh naya link nikalay ga
+            if (consecutiveErrors >= 2) {
+                console.log(`[⚠️] Lagta hai M3U8 link expire ho gaya hai. Dobara fetch kar raha hoon...`);
+                streamData = await getStreamData();
+                consecutiveErrors = 0;
+            }
+        }
         
-        // Cleanup Temporary File
-        if (fs.existsSync(rawLiveClip)) { fs.unlinkSync(rawLiveClip); }
-    } else {
-        console.log(`  [❌] Pipeline failed.`);
+        console.log(`[⏳] 3 Minute ka wait kar raha hoon aglay clip ke liye...`);
+        await new Promise(r => setTimeout(r, 180000)); // 3 Minutes wait
+        clipCounter++;
     }
-    
-    console.log(`[✅] Action Mukammal. Ab aap video download kar sakte hain!`);
-    process.exit(0); // Foran band karo taake artifact available ho jaye
 }
 
-// Start Factory
 main();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// const puppeteer = require('puppeteer');
+// const { spawnSync } = require('child_process');
+// const fs = require('fs');
+
+// console.log("\n" + "=".repeat(50));
+// console.log("   🚀 NODE.JS HYBRID CLOUD FACTORY (GITHUB ARTIFACT EDITION)");
+// console.log("=".repeat(50));
+
+// // ==========================================
+// // ⚙️ SETTINGS & ENVIRONMENT VARIABLES
+// // ==========================================
+// const START_TIME = Date.now();
+// const RESTART_TRIGGER_MS = (5 * 60 * 60 + 30 * 60) * 1000; // 5.5 Hours
+// const END_TIME_LIMIT_MS = (5 * 60 * 60 + 50 * 60) * 1000;
+
+// const TITLES_INPUT = process.env.TITLES_LIST || 'Live Match Today';
+// const DESCS_INPUT = process.env.DESCS_LIST || 'Watch the live action here';
+// const HASHTAGS = process.env.HASHTAGS || '#CricketLive #MatchToday';
+
+// const TARGET_WEBSITE = process.env.TARGET_URL || "https://bhalocast.com/atoplay.php?v=wextres&hello=m1lko&expires=123456";
+// const REFERER = "https://bhalocast.com/";
+
+// // 🛡️ PROXY SETTINGS
+// const PROXY_IP = process.env.PROXY_IP || '';
+// const PROXY_PORT = process.env.PROXY_PORT || '';
+// const PROXY_USER = process.env.PROXY_USER || '';
+// const PROXY_PASS = process.env.PROXY_PASS || '';
+
+// let consecutiveLinkFails = 0;
+// let consecutiveErrors = 0;
+
+// function formatPKT(timestampMs = Date.now()) {
+//     return new Date(timestampMs).toLocaleString('en-US', {
+//         timeZone: 'Asia/Karachi', hour12: true, year: 'numeric', month: 'short',
+//         day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'
+//     }) + " PKT";
+// }
+
+// // Artifacts Folder Banana
+// const artifactDir = './artifacts';
+// if (!fs.existsSync(artifactDir)){
+//     fs.mkdirSync(artifactDir);
+// }
+
+// // ==========================================
+// // 🔍 WORKER 0: GET M3U8 LINK (SMART CHECK + PROXY)
+// // ==========================================
+// async function getStreamData() {
+//     console.log(`\n[🔍 STEP 1] Puppeteer Chrome Start kar raha hoon... (Strike: ${consecutiveLinkFails}/3)`);
+    
+//     let browserArgs = [
+//         '--no-sandbox', 
+//         '--disable-setuid-sandbox', 
+//         '--disable-blink-features=AutomationControlled', 
+//         '--mute-audio', 
+//         '--disable-dev-shm-usage'
+//     ];
+
+//     if (PROXY_IP && PROXY_PORT) {
+//         console.log(`[🛡️ Proxy] Using Proxy: ${PROXY_IP}:${PROXY_PORT}`);
+//         browserArgs.push(`--proxy-server=http://${PROXY_IP}:${PROXY_PORT}`);
+//     } else {
+//         console.log(`[⚠️ Proxy] No Proxy settings found. Running on direct IP.`);
+//     }
+
+//     const browser = await puppeteer.launch({ headless: true, args: browserArgs });
+//     const page = await browser.newPage();
+
+//     if (PROXY_USER && PROXY_PASS) {
+//         await page.authenticate({ username: PROXY_USER, password: PROXY_PASS });
+//     }
+
+//     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36');
+
+//     let streamData = null;
+//     page.on('request', (request) => {
+//         const url = request.url();
+//         if (url.includes('.m3u8')) {
+//             streamData = {
+//                 url: url,
+//                 ua: request.headers()['user-agent'] || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+//                 cookie: request.headers()['cookie'] || '',
+//                 referer: REFERER
+//             };
+//         }
+//     });
+
+//     try {
+//         console.log(`[🌐] Target URL par ja raha hoon: ${TARGET_WEBSITE}`);
+//         await page.goto(TARGET_WEBSITE, { waitUntil: 'networkidle2', timeout: 60000 });
+//         await page.click('body').catch(() => {});
+        
+//         console.log(`[⏳] M3U8 Link ka intezar hai... (5 Second ke 3 Rounds)`);
+//         for (let i = 1; i <= 3; i++) {
+//             await new Promise(r => setTimeout(r, 5000));
+//             if (streamData) {
+//                 console.log(`[✅] Round ${i} mein link mil gaya! Aage barh raha hoon...`);
+//                 break;
+//             } else {
+//                 console.log(`[⚠️] Round ${i}/3: Abhi tak link nahi mila...`);
+//             }
+//         }
+//     } catch (e) { 
+//         console.log(`[❌ ERROR] Page load nahi ho saka.`); 
+//     }
+    
+//     await browser.close();
+
+//     if (streamData) {
+//         consecutiveLinkFails = 0; 
+//         console.log(`[✅ BINGO] M3U8 Link pakar liya gaya!`);
+//         return streamData;
+//     } else {
+//         consecutiveLinkFails++;
+//         console.log(`[🚨 WARNING] Link nahi mila. Strike: ${consecutiveLinkFails}/3`);
+//         if (consecutiveLinkFails >= 3) {
+//             console.log(`[🛑 FATAL] 3 baar consecutive link fail! Bot band kar raha hoon.`);
+//             process.exit(1); 
+//         }
+//         return null;
+//     }
+// }
+
+// // ==========================================
+// // 🎥 WORKER 1 & 2: FFMPEG ENGINE (TEXT + BLUR + MERGE)
+// // ==========================================
+// function processVideo(data, rawLiveClip, finalMergedVideo) {
+//     console.log(`\n[🎬 Step 1] Capturing 15-second Live Clip with FULL Blur and Text...`);
+//     const headersCmd = `User-Agent: ${data.ua}\r\nReferer: ${data.referer}\r\nCookie: ${data.cookie}\r\n`;
+//     const topText = "Enter this on Google\\: bulbul4u-live.xyz";
+    
+//     let args1 = [
+//         "-y", "-thread_queue_size", "1024",
+//         "-headers", headersCmd, "-i", data.url,
+//         "-thread_queue_size", "1024", "-loop", "1", "-framerate", "30", "-i", "website_frame.png",
+//         "-thread_queue_size", "1024", "-stream_loop", "-1", "-i", "marya_live.mp3"
+//     ];
+
+//     let filterComplex1 = `[0:v]scale=1064:565[pip]; [1:v]scale=1080:924[bg_fixed]; [bg_fixed][pip]overlay=0:250[bg_pip]; [bg_pip]boxblur=15:5[blurred_bg]; [blurred_bg]drawtext=text='${topText}':x=(w-text_w)/2:y=h-110:fontsize=50:fontcolor=white:box=1:boxcolor=red@0.8:borderw=2:bordercolor=black[v_out]`;
+
+//     args1.push(
+//         "-filter_complex", filterComplex1,
+//         "-map", "[v_out]", "-map", "2:a",
+//         "-t", "15",
+//         "-c:v", "libx264", "-preset", "ultrafast", "-b:v", "1500k", "-r", "30",
+//         "-c:a", "aac", "-ar", "44100", "-ac", "2", "-b:a", "128k",
+//         rawLiveClip
+//     );
+
+//     try {
+//         console.log(`[>] Running FFmpeg Phase A (Capture & Edit)...`);
+//         spawnSync('ffmpeg', args1, { stdio: 'inherit' });
+
+//         if (fs.existsSync(rawLiveClip) && fs.statSync(rawLiveClip).size > 1000) {
+//             console.log(`[✅] Live clip successfully created.`);
+            
+//             console.log(`\n[🎬 Step 2] Merging Live Clip with 'main_video.mp4' (Syncing Resolution & FPS)...`);
+            
+//             let args2 = [
+//                 "-y",
+//                 "-i", rawLiveClip,
+//                 "-i", "main_video.mp4",
+//                 "-filter_complex",
+//                 "[0:v]scale=1080:924,setsar=1,fps=30,format=yuv420p[v0]; [1:v]scale=1080:924,setsar=1,fps=30,format=yuv420p[v1]; [0:a]aformat=sample_rates=44100:channel_layouts=stereo[a0]; [1:a]aformat=sample_rates=44100:channel_layouts=stereo[a1]; [v0][a0][v1][a1]concat=n=2:v=1:a=1[v_out][a_out]",
+//                 "-map", "[v_out]", "-map", "[a_out]",
+//                 "-c:v", "libx264", "-preset", "ultrafast", "-b:v", "1500k",
+//                 "-c:a", "aac", "-b:a", "128k",
+//                 finalMergedVideo
+//             ];
+
+//             console.log(`[>] Running FFmpeg Phase B (Merging)...`);
+//             spawnSync('ffmpeg', args2, { stdio: 'inherit' });
+
+//             if (fs.existsSync(finalMergedVideo) && fs.statSync(finalMergedVideo).size > 1000) {
+//                 console.log(`[✅] Merge Successful! Final Video is ready.`);
+//                 return true;
+//             }
+//         }
+//     } catch (e) {
+//         console.log(`[❌] FFmpeg Engine crashed: ${e.message}`);
+//     }
+//     return false;
+// }
+
+// // ==========================================
+// // 🚀 MAIN LOOP (THE BRAIN)
+// // ==========================================
+// async function main() {
+//     const requiredFiles = ["website_frame.png", "marya_live.mp3", "main_video.mp4"];
+//     for (let f of requiredFiles) {
+//         if (!fs.existsSync(f)) {
+//             console.log(`[🛑 Error] '${f}' file missing! Pehle isay upload karein.`);
+//             return;
+//         }
+//     }
+
+//     let clipCounter = 1;
+
+//     // Is loop ko hum filhal 1 cycle ke liye chalayenge (kyunke agar yeh lambi chali toh GitHub action end hone ka wait karna parega video lene ke liye)
+//     // Aap isay baad mein change kar sakte hain.
+//     const elapsedTimeMs = Date.now() - START_TIME;
+
+//     console.log(`\n${"-".repeat(50)}`);
+//     console.log(`--- 🔄 STARTING VIDEO CYCLE #${clipCounter} ---`);
+//     console.log(`${"-".repeat(50)}`);
+
+//     let data = await getStreamData();
+//     if (!data) {
+//         console.log(`[❌] Data nahi mila. Exit.`);
+//         process.exit(1);
+//     }
+    
+//     const rawLiveClip = `raw_live_${clipCounter}.mp4`;
+//     // Final video ko seedha Artifacts folder mein save karenge
+//     const finalMergedVideo = `${artifactDir}/ready_clip_${clipCounter}.mp4`; 
+
+//     const success = processVideo(data, rawLiveClip, finalMergedVideo);
+
+//     if (success) {
+//         console.log(`\n=========================================================`);
+//         console.log(`🎉 VIDEO #${clipCounter} IS SUCCESSFULLY SAVED TO GITHUB ARTIFACTS!`);
+//         console.log(`👉 Is console (log) ke bilkul neechay (Summary tab mein) "rendered-cricket-clips" par click karke download karein.`);
+//         console.log(`(⚠️ Yeh video 1 din baad automatically delete ho jayegi)`);
+//         console.log(`=========================================================\n`);
+        
+//         // Cleanup Temporary File
+//         if (fs.existsSync(rawLiveClip)) { fs.unlinkSync(rawLiveClip); }
+//     } else {
+//         console.log(`  [❌] Pipeline failed.`);
+//     }
+    
+//     console.log(`[✅] Action Mukammal. Ab aap video download kar sakte hain!`);
+//     process.exit(0); // Foran band karo taake artifact available ho jaye
+// }
+
+// // Start Factory
+// main();
 
 
 
