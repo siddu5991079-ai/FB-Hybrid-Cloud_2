@@ -1,4 +1,3 @@
-
 const puppeteer = require('puppeteer');
 const { spawnSync, execSync } = require('child_process');
 const fs = require('fs');
@@ -18,7 +17,7 @@ const REFERER = "https://bhalocast.com/";
 
 // Title Input Read kar raha hai aur special characters ko delete karke spaces ko '_' mein badal raha hai
 const VIDEO_TITLE = (process.env.VIDEO_TITLE || "Live_Match")
-    .replace(/[^\w\s-]/g, '') // A-Z, 0-9, spaces aur hyphens ke ilawa sab delete
+    .replace(/[^\w\s-]/g, '') 
     .trim()
     .replace(/\s+/g, '_');
 
@@ -30,7 +29,7 @@ const PROXY_PASS = process.env.PROXY_PASS || '';
 
 // GitHub CLI ko aapka Token chahiye
 process.env.GH_TOKEN = process.env.GH_PAT; 
-const REPO_NAME = process.env.GITHUB_REPOSITORY; // e.g., "ibrahim/cric-bot"
+const REPO_NAME = process.env.GITHUB_REPOSITORY;
 
 let consecutiveErrors = 0;
 
@@ -47,7 +46,7 @@ function formatPKT() {
     let m = parts.find(p => p.type === 'minute').value;
     let ampm = parts.find(p => p.type === 'dayPeriod').value.toUpperCase();
     
-    const fileNameTime = `${h}_${m}_${ampm}`; // e.g., 06_45_PM
+    const fileNameTime = `${h}_${m}_${ampm}`; 
     return { displayTime, fileNameTime };
 }
 
@@ -113,15 +112,17 @@ async function getStreamData() {
 }
 
 // ==========================================
-// 🎥 WORKER 1 & 2: FFMPEG ENGINE (16:9 YouTube Standard)
+// 🎥 WORKER 1 & 2: FFMPEG ENGINE (YouTube 1920x1080 Standard)
 // ==========================================
 function processVideo(data, rawLiveClip, finalMergedVideo) {
-    console.log(`\n[🎬 Step 1] Capturing 15-second MUTE Live Clip in 1920x1080...`);
+    console.log(`\n[🎬 Step 1] Capturing 15-second MUTE Live Clip...`);
     const headersCmd = `User-Agent: ${data.ua}\r\nReferer: ${data.referer}\r\nCookie: ${data.cookie}\r\n`;
     const topText = "Enter this on Google\\: bulbul4u-live.xyz";
     
-    // 🛠️ Yahan background (website_frame) aur live video dono ko 1920x1080 kiya gaya hai
-    let filterComplex1 = `[0:v]scale=1920:1080:force_original_aspect_ratio=decrease[pip]; [1:v]scale=1920:1080[bg_fixed]; [bg_fixed][pip]overlay=(W-w)/2:(H-h)/2[bg_pip]; [bg_pip]boxblur=15:5[blurred_bg]; [blurred_bg]drawtext=text='${topText}':x=(w-text_w)/2:y=h-150:fontsize=65:fontcolor=white:box=1:boxcolor=red@0.8:borderw=2:bordercolor=black[v_out]`;
+    // 🛠️ YAHAN HAI MAGIC: 
+    // Pehle aapke purane 1080x924 layout ko exactly fit karega (taake website frame set rahay), 
+    // aur jab sab kuch set ho jayega, toh [v_drawn] ko [v_out] banatay waqt pooray frame ko 1920x1080 mein badal dega!
+    let filterComplex1 = `[0:v]scale=1064:565[pip]; [1:v]scale=1080:924[bg_fixed]; [bg_fixed][pip]overlay=0:250[bg_pip]; [bg_pip]boxblur=20:5[blurred_bg]; [blurred_bg]drawtext=text='${topText}':x=(w-text_w)/2:y=h-110:fontsize=50:fontcolor=white:box=1:boxcolor=red@0.8:borderw=2:bordercolor=black[v_drawn]; [v_drawn]scale=1920:1080,setsar=1,fps=30[v_out]`;
 
     let args1 = [
         "-y", "-thread_queue_size", "1024", "-headers", headersCmd, "-i", data.url,
@@ -134,9 +135,9 @@ function processVideo(data, rawLiveClip, finalMergedVideo) {
     try {
         spawnSync('ffmpeg', args1, { stdio: 'inherit' });
         if (fs.existsSync(rawLiveClip)) {
-            console.log(`\n[🎬 Step 2] Merging Videos in 1920x1080 & Adding Global Audio...`);
+            console.log(`\n[🎬 Step 2] Merging Videos (1920x1080) & Adding Global Audio...`);
             
-            // 🛠️ Final Output ko strictly 1920x1080 mein combine kiya ja raha hai
+            // 🛠️ Phase 2: Main video ko bhi 1920x1080 karke rawLiveClip ke sath mix karega
             let filterComplex2 = `[0:v]scale=1920:1080,setsar=1,fps=30,format=yuv420p[v0]; [1:v]scale=1920:1080,setsar=1,fps=30,format=yuv420p[v1]; [v0][v1]concat=n=2:v=1:a=0[v_out]`;
 
             let args2 = [
@@ -188,13 +189,12 @@ async function main() {
         if (success) {
             console.log(`\n[🚀 Upload] Video ko GitHub Releases mein daal raha hoon...`);
             try {
-                // Quotes shamil kar diye gaye hain taake special characters error na karein
                 execSync(`gh release upload Live-Clips "${videoName}" --clobber`, { stdio: 'inherit' });
                 
                 const downloadLink = `https://github.com/${REPO_NAME}/releases/download/Live-Clips/${videoName}`;
                 
                 console.log(`\n=========================================================`);
-                console.log(`🎉 VIDEO IS LIVE ON GITHUB RELEASES! (1080p 16:9)`);
+                console.log(`🎉 VIDEO IS LIVE ON GITHUB RELEASES! (YouTube 1920x1080)`);
                 console.log(`⏰ Time: ${timeInfo.displayTime} PKT`);
                 console.log(`👉 Direct Download Link:`);
                 console.log(`${downloadLink}`);
@@ -205,7 +205,6 @@ async function main() {
                 console.log(`[❌] Upload Failed: GitHub CLI Error.`);
             }
 
-            // Cleanup Local Files
             if (fs.existsSync(rawLiveClip)) fs.unlinkSync(rawLiveClip);
             if (fs.existsSync(videoName)) fs.unlinkSync(videoName);
             consecutiveErrors = 0;
@@ -221,7 +220,7 @@ async function main() {
         }
         
         console.log(`[⏳] 3 Minute ka wait kar raha hoon aglay clip ke liye...`);
-        await new Promise(r => setTimeout(r, 180000)); // 3 Minutes wait
+        await new Promise(r => setTimeout(r, 180000)); 
         clipCounter++;
     }
 }
