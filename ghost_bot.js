@@ -1,36 +1,34 @@
-
 const puppeteer = require('puppeteer');
 const { spawnSync, execSync } = require('child_process');
 const fs = require('fs');
-
+// YAHAN AXIOS ADD KIYA GAYA HAI (API UPLOAD KE LIYE)
+const axios = require('axios'); 
 
 console.log("\n" + "=".repeat(50));
-console.log("   🚀 NODE.JS HYBRID CLOUD FACTORY (GITHUB RELEASES - YOUTUBE 16:9)");
+console.log("   🚀 NODE.JS HYBRID CLOUD FACTORY (GITHUB API UPLOAD EDITION)");
 console.log("=".repeat(50));
 
 // ==========================================
 // ⚙️ SETTINGS & ENVIRONMENT VARIABLES
 // ==========================================
 const START_TIME = Date.now();
-const END_TIME_LIMIT_MS = (5 * 60 * 60 + 50 * 60) * 1000; // 5 hours 50 mins limit
+const END_TIME_LIMIT_MS = (5 * 60 * 60 + 50 * 60) * 1000; 
 
 const TARGET_WEBSITE = process.env.TARGET_URL || "https://bhalocast.com/atoplay.php?v=wextres&hello=m1lko&expires=123456";
 const REFERER = "https://bhalocast.com/";
 
-// Title Input Read kar raha hai aur special characters ko delete karke spaces ko '_' mein badal raha hai
 const VIDEO_TITLE = (process.env.VIDEO_TITLE || "Live_Match")
     .replace(/[^\w\s-]/g, '') 
     .trim()
     .replace(/\s+/g, '_');
 
-// 🛡️ PROXY SETTINGS
 const PROXY_IP = process.env.PROXY_IP || '';
 const PROXY_PORT = process.env.PROXY_PORT || '';
 const PROXY_USER = process.env.PROXY_USER || '';
 const PROXY_PASS = process.env.PROXY_PASS || '';
 
-// GitHub CLI ko aapka Token chahiye
-process.env.GH_TOKEN = process.env.GH_PAT; 
+// GitHub API Token
+const GH_TOKEN = process.env.GITHUB_TOKEN || process.env.GH_PAT; 
 const REPO_NAME = process.env.GITHUB_REPOSITORY;
 
 let consecutiveErrors = 0;
@@ -53,25 +51,77 @@ function formatPKT() {
 }
 
 // ==========================================
-// 🧹 PREPARE GITHUB RELEASES (AUTO-CLEANUP)
+// 🧹 PREPARE GITHUB RELEASES (USING API)
 // ==========================================
-function setupGitHubRelease() {
+async function setupGitHubReleaseAPI() {
     console.log(`\n[⚙️] GitHub Releases ki safai aur setup kar raha hoon...`);
+    
+    // API Setup: Release dhoondo aur create karo
     try {
-        execSync(`gh release delete Live-Clips --cleanup-tag -y`, { stdio: 'ignore' });
-        console.log(`  [🧹] Purani release delete ho gayi.`);
-    } catch (e) {} 
+        const checkRes = await axios.get(`https://api.github.com/repos/${REPO_NAME}/releases/tags/Live-Clips`, {
+            headers: { 'Authorization': `token ${GH_TOKEN}`, 'Accept': 'application/vnd.github.v3+json' }
+        });
+        
+        // Agar pehle se hai toh usay delete kardo
+        if (checkRes.data && checkRes.data.id) {
+            await axios.delete(`https://api.github.com/repos/${REPO_NAME}/releases/${checkRes.data.id}`, {
+                headers: { 'Authorization': `token ${GH_TOKEN}` }
+            });
+            console.log(`  [🧹] Purani release delete ho gayi.`);
+        }
+    } catch (e) {
+        // Ignored, pehle se release nahi hogi
+    }
 
     try {
-        execSync(`gh release create Live-Clips --title "🔴 Live Cricket Clips" --notes "Yahan aapki current match ki videos aayengi."`, { stdio: 'ignore' });
+        await axios.post(`https://api.github.com/repos/${REPO_NAME}/releases`, {
+            tag_name: "Live-Clips",
+            name: "🔴 Live Cricket Clips",
+            body: "Yahan aapki current match ki videos aayengi."
+        }, { headers: { 'Authorization': `token ${GH_TOKEN}`, 'Accept': 'application/vnd.github.v3+json' } });
         console.log(`  [✅] Naya Release Box tayyar hai!`);
     } catch (e) {
-        console.log(`  [⚠️] Release Box pehle se mojood hai.`);
+        console.log(`  [❌] Release Box setup error: ${e.response ? e.response.statusText : e.message}`);
     }
 }
 
 // ==========================================
-// 🔍 WORKER 0: GET M3U8 LINK (ONLY ONCE)
+// 📤 UPLOAD TO GITHUB RELEASE (USING API)
+// ==========================================
+async function uploadToReleaseAPI(filePath, fileName) {
+    try {
+        // Step 1: Release ID hasil karo
+        const relRes = await axios.get(`https://api.github.com/repos/${REPO_NAME}/releases/tags/Live-Clips`, {
+            headers: { 'Authorization': `token ${GH_TOKEN}`, 'Accept': 'application/vnd.github.v3+json' }
+        });
+        const releaseId = relRes.data.id;
+        const uploadUrlBase = relRes.data.upload_url.split('{')[0]; // URL saaf karna
+
+        // Step 2: File read karke Upload karo
+        const fileData = fs.readFileSync(filePath);
+        const finalUploadUrl = `${uploadUrlBase}?name=${fileName}`;
+        
+        const uploadRes = await axios.post(finalUploadUrl, fileData, {
+            headers: {
+                'Authorization': `token ${GH_TOKEN}`,
+                'Content-Type': 'video/mp4',
+                'Content-Length': fileData.length,
+                'Accept': 'application/vnd.github.v3+json'
+            },
+            maxBodyLength: Infinity,
+            maxContentLength: Infinity
+        });
+
+        if (uploadRes.status === 201) return true;
+        return false;
+    } catch (e) {
+        console.log(`[❌] Upload Failed Details:`, e.response ? e.response.data : e.message);
+        return false;
+    }
+}
+
+// ==========================================
+// 🔍 WORKER 0: GET M3U8 LINK
 // ==========================================
 async function getStreamData() {
     console.log(`\n[🔍 STEP 1] Puppeteer Chrome Start kar raha hoon...`);
@@ -114,16 +164,13 @@ async function getStreamData() {
 }
 
 // ==========================================
-// 🎥 WORKER 1 & 2: FFMPEG ENGINE (YouTube 1920x1080 Standard)
+// 🎥 WORKER 1 & 2: FFMPEG ENGINE (1920x1080 Magic)
 // ==========================================
 function processVideo(data, rawLiveClip, finalMergedVideo) {
     console.log(`\n[🎬 Step 1] Capturing 15-second MUTE Live Clip...`);
     const headersCmd = `User-Agent: ${data.ua}\r\nReferer: ${data.referer}\r\nCookie: ${data.cookie}\r\n`;
     const topText = "Enter this on Google\\: bulbul4u-live.xyz";
     
-    // 🛠️ YAHAN HAI MAGIC: 
-    // Pehle aapke purane 1080x924 layout ko exactly fit karega (taake website frame set rahay), 
-    // aur jab sab kuch set ho jayega, toh [v_drawn] ko [v_out] banatay waqt pooray frame ko 1920x1080 mein badal dega!
     let filterComplex1 = `[0:v]scale=1064:565[pip]; [1:v]scale=1080:924[bg_fixed]; [bg_fixed][pip]overlay=0:250[bg_pip]; [bg_pip]boxblur=15:5[blurred_bg]; [blurred_bg]drawtext=text='${topText}':x=(w-text_w)/2:y=h-110:fontsize=50:fontcolor=white:box=1:boxcolor=red@0.8:borderw=2:bordercolor=black[v_drawn]; [v_drawn]scale=1920:1080,setsar=1,fps=30[v_out]`;
 
     let args1 = [
@@ -139,7 +186,6 @@ function processVideo(data, rawLiveClip, finalMergedVideo) {
         if (fs.existsSync(rawLiveClip)) {
             console.log(`\n[🎬 Step 2] Merging Videos (1920x1080) & Adding Global Audio...`);
             
-            // 🛠️ Phase 2: Main video ko bhi 1920x1080 karke rawLiveClip ke sath mix karega
             let filterComplex2 = `[0:v]scale=1920:1080,setsar=1,fps=30,format=yuv420p[v0]; [1:v]scale=1920:1080,setsar=1,fps=30,format=yuv420p[v1]; [v0][v1]concat=n=2:v=1:a=0[v_out]`;
 
             let args2 = [
@@ -147,9 +193,7 @@ function processVideo(data, rawLiveClip, finalMergedVideo) {
                 "-i", rawLiveClip,             
                 "-i", "main_video.mp4",        
                 "-stream_loop", "-1", "-i", "marya_live.mp3", 
-                
                 "-filter_complex", filterComplex2,
-                
                 "-map", "[v_out]",             
                 "-map", "2:a",                 
                 "-shortest",                   
@@ -168,7 +212,7 @@ function processVideo(data, rawLiveClip, finalMergedVideo) {
 // 🚀 MAIN LOOP (THE BRAIN)
 // ==========================================
 async function main() {
-    setupGitHubRelease(); 
+    await setupGitHubReleaseAPI(); 
 
     let streamData = await getStreamData();
     let clipCounter = 1;
@@ -189,10 +233,12 @@ async function main() {
         const success = processVideo(streamData, rawLiveClip, videoName);
 
         if (success) {
-            console.log(`\n[🚀 Upload] Video ko GitHub Releases mein daal raha hoon...`);
-            try {
-                execSync(`gh release upload Live-Clips "${videoName}" --clobber`, { stdio: 'inherit' });
-                
+            console.log(`\n[🚀 Upload] Video ko GitHub API ke zariye Releases mein daal raha hoon...`);
+            
+            // Yahan hum API function call kar rahe hain
+            const isUploaded = await uploadToReleaseAPI(videoName, videoName);
+            
+            if (isUploaded) {
                 const downloadLink = `https://github.com/${REPO_NAME}/releases/download/Live-Clips/${videoName}`;
                 
                 console.log(`\n=========================================================`);
@@ -202,9 +248,8 @@ async function main() {
                 console.log(`${downloadLink}`);
                 console.log(`(Aap apne Mobile se repository ke 'Releases' tab mein ja kar bhi download kar sakte hain!)`);
                 console.log(`=========================================================\n`);
-                
-            } catch (e) {
-                console.log(`[❌] Upload Failed: GitHub CLI Error.`);
+            } else {
+                console.log(`[❌] Upload Failed via API.`);
             }
 
             if (fs.existsSync(rawLiveClip)) fs.unlinkSync(rawLiveClip);
