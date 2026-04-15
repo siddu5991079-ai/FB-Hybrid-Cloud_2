@@ -154,10 +154,10 @@ async function getStreamData() {
 }
 
 // ==========================================
-// 📸 WORKER 0.5: CAPTURE HD THUMBNAIL (PUPPETEER)
+// 📸 WORKER 0.5: CAPTURE HD THUMBNAIL (1920x1080)
 // ==========================================
 async function captureHDLiveFrame(data, titleText, outputImagePath) {
-    console.log(`\n[📸 Step 0.5] HTML/CSS se VIP HD Thumbnail bana raha hoon...`);
+    console.log(`\n[📸 Step 0.5] HTML/CSS se VIP HD Thumbnail bana raha hoon (1920x1080)...`);
     const rawFrame = `temp_raw_frame_${Date.now()}.jpg`;
     
     try {
@@ -172,19 +172,20 @@ async function captureHDLiveFrame(data, titleText, outputImagePath) {
     
     const b64Image = "data:image/jpeg;base64," + fs.readFileSync(rawFrame).toString('base64');
     
+    // 🛠️ YAHAN UPDATE HUA HAI: Width 1920, Height 1080 aur text size bara kar diya gaya hai
     const htmlCode = `
         <!DOCTYPE html><html><head>
         <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@700;900&display=swap" rel="stylesheet">
         <style>
-            body { margin: 0; width: 1280px; height: 720px; background: #0f0f0f; font-family: 'Roboto', sans-serif; color: white; display: flex; flex-direction: column; overflow: hidden; }
-            .header { height: 100px; display: flex; align-items: center; padding: 0 40px; justify-content: space-between; z-index: 10; }
-            .logo { font-size: 50px; font-weight: 900; letter-spacing: 1px; text-shadow: 0 0 10px rgba(255,255,255,0.8); }
-            .live-badge { border: 4px solid #cc0000; border-radius: 12px; padding: 5px 20px; font-size: 40px; font-weight: 700; display: flex; gap: 10px; }
-            .hero-container { position: relative; width: 100%; height: 440px; }
-            .hero-img { width: 100%; height: 100%; object-fit: cover; filter: blur(5px); opacity: 0.6; }
-            .pip-img { position: absolute; top: 20px; right: 40px; width: 45%; border: 6px solid white; box-shadow: -15px 15px 30px rgba(0,0,0,0.8); }
-            .text-container { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 10px 40px; }
-            .main-title { font-size: 70px; font-weight: 900; line-height: 1.1; text-shadow: 6px 6px 15px rgba(0,0,0,0.9); }
+            body { margin: 0; width: 1920px; height: 1080px; background: #0f0f0f; font-family: 'Roboto', sans-serif; color: white; display: flex; flex-direction: column; overflow: hidden; }
+            .header { height: 150px; display: flex; align-items: center; padding: 0 60px; justify-content: space-between; z-index: 10; }
+            .logo { font-size: 75px; font-weight: 900; letter-spacing: 1px; text-shadow: 0 0 15px rgba(255,255,255,0.8); }
+            .live-badge { border: 6px solid #cc0000; border-radius: 18px; padding: 10px 30px; font-size: 60px; font-weight: 700; display: flex; align-items: center; gap: 15px; }
+            .hero-container { position: relative; width: 100%; height: 660px; }
+            .hero-img { width: 100%; height: 100%; object-fit: cover; filter: blur(8px); opacity: 0.6; }
+            .pip-img { position: absolute; top: 40px; right: 60px; width: 45%; border: 8px solid white; box-shadow: -20px 20px 40px rgba(0,0,0,0.8); }
+            .text-container { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 20px 60px; }
+            .main-title { font-size: 105px; font-weight: 900; line-height: 1.1; text-shadow: 8px 8px 20px rgba(0,0,0,0.9); }
             .live-text { color: #cc0000; }
         </style>
         </head><body>
@@ -194,7 +195,7 @@ async function captureHDLiveFrame(data, titleText, outputImagePath) {
         </body></html>`;
 
     try {
-        const browser = await puppeteer.launch({ headless: true, defaultViewport: { width: 1280, height: 720 }, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+        const browser = await puppeteer.launch({ headless: true, defaultViewport: { width: 1920, height: 1080 }, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
         const page = await browser.newPage();
         await page.setContent(htmlCode);
         await page.screenshot({ path: outputImagePath });
@@ -206,7 +207,7 @@ async function captureHDLiveFrame(data, titleText, outputImagePath) {
     if (fs.existsSync(rawFrame)) fs.unlinkSync(rawFrame); 
 
     if (fs.existsSync(outputImagePath)) {
-        console.log(`  [✅] HD Thumbnail Ready: ${outputImagePath}`);
+        console.log(`  [✅] HD Thumbnail Ready (1920x1080): ${outputImagePath}`);
         return true;
     }
     return false;
@@ -343,10 +344,9 @@ async function main() {
 
         const rawLiveClip = `raw_live.mp4`;
         const videoName = `${VIDEO_TITLE}_Clip_${clipCounter}_${timeInfo.fileNameTime}_PKT.mp4`; 
-        // Image .png mein save kar rahe hain kyunke yeh ab puppeteer ki HD file hai
         const liveFramePath = `live_frame_${clipCounter}.png`; 
 
-        // 1. HD Live Frame Capture (For FB Thumbnail) - NAYA ENGINE
+        // 1. HD Live Frame Capture (For FB Thumbnail) - 1920x1080
         await captureHDLiveFrame(streamData, CUSTOM_TITLE, liveFramePath);
 
         // 2. Video Capture & Build
@@ -379,13 +379,11 @@ async function main() {
         const waitStartTime = Date.now();
 
         if (ACTIVE_TOKEN) {
-            // Is Function ko naya HD Thumbnail de rahe hain taake wo set ho sake
             await fbCheckAndComment(ACTIVE_TOKEN, liveFramePath);
         } else {
             console.log(`  [⚠️] Facebook Token missing, skipping FB Monitor.`);
         }
 
-        // Frame ka kaam khatam, isay delete kar dein
         if (fs.existsSync(liveFramePath)) fs.unlinkSync(liveFramePath);
 
         const timeSpentInFB = Date.now() - waitStartTime;
