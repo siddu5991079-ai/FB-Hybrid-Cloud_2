@@ -15,9 +15,8 @@ const END_TIME_LIMIT_MS = (5 * 60 * 60 + 50 * 60) * 1000; // 5 hours 50 mins lim
 const TARGET_WEBSITE = process.env.TARGET_URL || "https://bhalocast.com/atoplay.php?v=wextres&hello=m1lko&expires=123456";
 const REFERER = "https://bhalocast.com/";
 
-// Title Input Read kar raha hai aur special characters ko delete karke spaces ko '_' mein badal raha hai
 const VIDEO_TITLE = (process.env.VIDEO_TITLE || "Live_Match")
-    .replace(/[^\w\s-]/g, '') // A-Z, 0-9, spaces aur hyphens ke ilawa sab delete
+    .replace(/[^\w\s-]/g, '') 
     .trim()
     .replace(/\s+/g, '_');
 
@@ -27,9 +26,9 @@ const PROXY_PORT = process.env.PROXY_PORT || '';
 const PROXY_USER = process.env.PROXY_USER || '';
 const PROXY_PASS = process.env.PROXY_PASS || '';
 
-// GitHub CLI ko aapka Token chahiye
-process.env.GH_TOKEN = process.env.GH_PAT; 
-const REPO_NAME = process.env.GITHUB_REPOSITORY; // e.g., "ibrahim/cric-bot"
+// GitHub CLI ke liye Auto-Token setup
+process.env.GH_TOKEN = process.env.GITHUB_TOKEN || process.env.GH_PAT; 
+const REPO_NAME = process.env.GITHUB_REPOSITORY;
 
 let consecutiveErrors = 0;
 
@@ -46,22 +45,22 @@ function formatPKT() {
     let m = parts.find(p => p.type === 'minute').value;
     let ampm = parts.find(p => p.type === 'dayPeriod').value.toUpperCase();
     
-    const fileNameTime = `${h}_${m}_${ampm}`; // e.g., 06_45_PM
+    const fileNameTime = `${h}_${m}_${ampm}`; 
     return { displayTime, fileNameTime };
 }
 
 // ==========================================
-// 🧹 PREPARE GITHUB RELEASES (AUTO-CLEANUP)
+// 🧹 PREPARE GITHUB RELEASES
 // ==========================================
 function setupGitHubRelease() {
     console.log(`\n[⚙️] GitHub Releases ki safai aur setup kar raha hoon...`);
     try {
-        execSync(`gh release delete Live-Clips --cleanup-tag -y`, { stdio: 'ignore' });
+        execSync(`gh release delete Live-Clips --cleanup-tag -y`, { stdio: 'pipe' });
         console.log(`  [🧹] Purani release delete ho gayi.`);
     } catch (e) {} 
 
     try {
-        execSync(`gh release create Live-Clips --title "🔴 Live Cricket Clips" --notes "Yahan aapki current match ki videos aayengi."`, { stdio: 'ignore' });
+        execSync(`gh release create Live-Clips --title "🔴 Live Cricket Clips" --notes "Yahan aapki current match ki videos aayengi."`, { stdio: 'pipe' });
         console.log(`  [✅] Naya Release Box tayyar hai!`);
     } catch (e) {
         console.log(`  [⚠️] Release Box pehle se mojood hai.`);
@@ -69,7 +68,7 @@ function setupGitHubRelease() {
 }
 
 // ==========================================
-// 🔍 WORKER 0: GET M3U8 LINK (ONLY ONCE)
+// 🔍 WORKER 0: GET M3U8 LINK
 // ==========================================
 async function getStreamData() {
     console.log(`\n[🔍 STEP 1] Puppeteer Chrome Start kar raha hoon...`);
@@ -112,14 +111,14 @@ async function getStreamData() {
 }
 
 // ==========================================
-// 🎥 WORKER 1 & 2: FFMPEG ENGINE (Updated for 1920x1080 Final Output)
+// 🎥 WORKER 1 & 2: FFMPEG ENGINE (YouTube Ratio Added)
 // ==========================================
 function processVideo(data, rawLiveClip, finalMergedVideo) {
     console.log(`\n[🎬 Step 1] Capturing 15-second MUTE Live Clip...`);
     const headersCmd = `User-Agent: ${data.ua}\r\nReferer: ${data.referer}\r\nCookie: ${data.cookie}\r\n`;
     const topText = "Enter this on Google\\: bulbul4u-live.xyz";
     
-    // Yahan frame bilkul aapki di hui settings ke mutabiq hai (Koi chedarkhani nahi ki)
+    // Aapka apna original frame code
     let args1 = [
         "-y", "-thread_queue_size", "1024", "-headers", headersCmd, "-i", data.url,
         "-thread_queue_size", "1024", "-loop", "1", "-framerate", "30", "-i", "website_frame.png",
@@ -131,9 +130,9 @@ function processVideo(data, rawLiveClip, finalMergedVideo) {
     try {
         spawnSync('ffmpeg', args1, { stdio: 'inherit' });
         if (fs.existsSync(rawLiveClip)) {
-            console.log(`\n[🎬 Step 2] Merging Videos in 1920x1080 (YouTube Ratio) & Adding Global Audio...`);
+            console.log(`\n[🎬 Step 2] Merging Videos & Converting to 1920x1080 (YouTube Size)...`);
             
-            // 🛠️ YAHAN CHANGE KIYA HAI: Dono videos ko merge hone se pehle 1920x1080 par scale kar diya gaya hai
+            // 🛠️ YAHAN UPDATE HUA HAI: YouTube 16:9 Ratio logic add kar di gayi hai jo video ko center mein fit karke baqi hissa black kar degi
             let args2 = [
                 "-y", 
                 "-i", rawLiveClip,             
@@ -141,7 +140,7 @@ function processVideo(data, rawLiveClip, finalMergedVideo) {
                 "-stream_loop", "-1", "-i", "marya_live.mp3", 
                 
                 "-filter_complex", 
-                "[0:v]scale=1920:1080,setsar=1,fps=30,format=yuv420p[v0]; [1:v]scale=1920:1080,setsar=1,fps=30,format=yuv420p[v1]; [v0][v1]concat=n=2:v=1:a=0[v_out]",
+                "[0:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30,format=yuv420p[v0]; [1:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30,format=yuv420p[v1]; [v0][v1]concat=n=2:v=1:a=0[v_out]",
                 
                 "-map", "[v_out]",             
                 "-map", "2:a",                 
@@ -184,8 +183,9 @@ async function main() {
         if (success) {
             console.log(`\n[🚀 Upload] Video ko GitHub Releases mein daal raha hoon...`);
             try {
-                // Quotes shamil kar diye gaye hain taake special characters error na karein
-                execSync(`gh release upload Live-Clips "${videoName}" --clobber`, { stdio: 'inherit' });
+                // Stdout proper check hoga taake koi bhi error ho toh console par print ho
+                const uploadRes = execSync(`gh release upload Live-Clips "${videoName}" --clobber`, { encoding: 'utf8' });
+                if(uploadRes) console.log(`  [>] ${uploadRes.trim()}`);
                 
                 const downloadLink = `https://github.com/${REPO_NAME}/releases/download/Live-Clips/${videoName}`;
                 
@@ -198,10 +198,10 @@ async function main() {
                 console.log(`=========================================================\n`);
                 
             } catch (e) {
-                console.log(`[❌] Upload Failed: GitHub CLI Error.`);
+                console.log(`[❌] Upload Failed: YML file mein permissions missing hain.`);
+                console.log(`[🔍] Details:`, e.stderr || e.message);
             }
 
-            // Cleanup Local Files
             if (fs.existsSync(rawLiveClip)) fs.unlinkSync(rawLiveClip);
             if (fs.existsSync(videoName)) fs.unlinkSync(videoName);
             consecutiveErrors = 0;
@@ -217,7 +217,7 @@ async function main() {
         }
         
         console.log(`[⏳] 3 Minute ka wait kar raha hoon aglay clip ke liye...`);
-        await new Promise(r => setTimeout(r, 180000)); // 3 Minutes wait
+        await new Promise(r => setTimeout(r, 180000)); 
         clipCounter++;
     }
 }
