@@ -5,7 +5,7 @@ const axios = require('axios');
 const FormData = require('form-data'); 
 
 console.log("\n" + "=".repeat(50));
-console.log("   🚀 NODE.JS SUPER HYBRID CLOUD (HD THUMBNAIL + FB MONITOR)");
+console.log("   🚀 NODE.JS SUPER HYBRID CLOUD (PROXY CONTROL + DYNAMIC HD + FB)");
 console.log("=".repeat(50));
 
 // ==========================================
@@ -21,6 +21,10 @@ const VIDEO_TITLE = (process.env.VIDEO_TITLE || "Live_Match")
     .replace(/[^\w\s-]/g, '') 
     .trim()
     .replace(/\s+/g, '_');
+
+// 🛡️ PROXY SETTINGS & SWITCH
+const USE_PROXY = process.env.USE_PROXY || 'Yes (Proxy ON)';
+const IS_PROXY_ON = USE_PROXY === 'Yes (Proxy ON)';
 
 const PROXY_IP = process.env.PROXY_IP || '';
 const PROXY_PORT = process.env.PROXY_PORT || '';
@@ -122,12 +126,21 @@ async function uploadToReleaseAPI(filePath, fileName) {
 async function getStreamData() {
     console.log(`\n[🔍 STEP 1] Puppeteer Chrome Start kar raha hoon...`);
     let browserArgs = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled', '--mute-audio', '--disable-dev-shm-usage'];
-    if (PROXY_IP && PROXY_PORT) browserArgs.push(`--proxy-server=http://${PROXY_IP}:${PROXY_PORT}`);
+    
+    if (IS_PROXY_ON && PROXY_IP && PROXY_PORT) {
+        browserArgs.push(`--proxy-server=http://${PROXY_IP}:${PROXY_PORT}`);
+        console.log(`  [🛡️] Proxy Mode: ON (${PROXY_IP})`);
+    } else {
+        console.log(`  [🚀] Proxy Mode: OFF (Direct Connection)`);
+    }
 
     const browser = await puppeteer.launch({ headless: true, args: browserArgs });
     const page = await browser.newPage();
 
-    if (PROXY_USER && PROXY_PASS) await page.authenticate({ username: PROXY_USER, password: PROXY_PASS });
+    if (IS_PROXY_ON && PROXY_USER && PROXY_PASS) {
+        await page.authenticate({ username: PROXY_USER, password: PROXY_PASS });
+    }
+    
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36');
 
     let streamData = null;
@@ -137,7 +150,7 @@ async function getStreamData() {
     });
 
     try {
-        console.log(`[🌐] Target URL par ja raha hoon (Proxy on)...`);
+        console.log(`[🌐] Target URL par ja raha hoon...`);
         await page.goto(TARGET_WEBSITE, { waitUntil: 'networkidle2', timeout: 60000 });
         await page.click('body').catch(() => {});
         for (let i = 1; i <= 3; i++) {
@@ -154,10 +167,10 @@ async function getStreamData() {
 }
 
 // ==========================================
-// 📸 WORKER 0.5: CAPTURE HD THUMBNAIL (1920x1080)
+// 📸 WORKER 0.5: CAPTURE HD THUMBNAIL (DYNAMIC SIZE)
 // ==========================================
 async function captureHDLiveFrame(data, titleText, outputImagePath) {
-    console.log(`\n[📸 Step 0.5] HTML/CSS se VIP HD Thumbnail bana raha hoon (1920x1080)...`);
+    console.log(`\n[📸 Step 0.5] Stream ke asli size par Thumbnail bana raha hoon...`);
     const rawFrame = `temp_raw_frame_${Date.now()}.jpg`;
     
     try {
@@ -169,23 +182,38 @@ async function captureHDLiveFrame(data, titleText, outputImagePath) {
     }
 
     if (!fs.existsSync(rawFrame)) return false;
+
+    // 🛠️ YAHAN MAGIC HAI: Frame ki original width aur height nikal rahe hain
+    let frameWidth = 1920;
+    let frameHeight = 1080;
+    try {
+        const dimensions = execSync(`ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 ${rawFrame}`).toString().trim();
+        const parts = dimensions.split('x');
+        if (parts.length === 2) {
+            frameWidth = parseInt(parts[0]);
+            frameHeight = parseInt(parts[1]);
+            console.log(`  [🔍] Frame Original Size Detected: ${frameWidth}x${frameHeight}`);
+        }
+    } catch (e) {
+        console.log("  [⚠️] Size detect nahi ho saka, default 1920x1080 use kar raha hoon.");
+    }
     
     const b64Image = "data:image/jpeg;base64," + fs.readFileSync(rawFrame).toString('base64');
     
-    // 🛠️ YAHAN UPDATE HUA HAI: Width 1920, Height 1080 aur text size bara kar diya gaya hai
+    // 🛠️ CSS ko bilkul responsive (% aur vw/vh) kar diya gaya hai
     const htmlCode = `
         <!DOCTYPE html><html><head>
         <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@700;900&display=swap" rel="stylesheet">
         <style>
-            body { margin: 0; width: 1920px; height: 1080px; background: #0f0f0f; font-family: 'Roboto', sans-serif; color: white; display: flex; flex-direction: column; overflow: hidden; }
-            .header { height: 150px; display: flex; align-items: center; padding: 0 60px; justify-content: space-between; z-index: 10; }
-            .logo { font-size: 75px; font-weight: 900; letter-spacing: 1px; text-shadow: 0 0 15px rgba(255,255,255,0.8); }
-            .live-badge { border: 6px solid #cc0000; border-radius: 18px; padding: 10px 30px; font-size: 60px; font-weight: 700; display: flex; align-items: center; gap: 15px; }
-            .hero-container { position: relative; width: 100%; height: 660px; }
+            body { margin: 0; width: ${frameWidth}px; height: ${frameHeight}px; background: #0f0f0f; font-family: 'Roboto', sans-serif; color: white; display: flex; flex-direction: column; overflow: hidden; }
+            .header { height: 15%; display: flex; align-items: center; padding: 0 4%; justify-content: space-between; z-index: 10; }
+            .logo { font-size: 4vw; font-weight: 900; letter-spacing: 0.1vw; text-shadow: 0 0 1vw rgba(255,255,255,0.8); }
+            .live-badge { border: 0.4vw solid #cc0000; border-radius: 1.5vw; padding: 0.8vw 2vw; font-size: 3vw; font-weight: 700; display: flex; align-items: center; gap: 1vw; }
+            .hero-container { position: relative; width: 100%; height: 60%; }
             .hero-img { width: 100%; height: 100%; object-fit: cover; filter: blur(8px); opacity: 0.6; }
-            .pip-img { position: absolute; top: 40px; right: 60px; width: 45%; border: 8px solid white; box-shadow: -20px 20px 40px rgba(0,0,0,0.8); }
-            .text-container { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 20px 60px; }
-            .main-title { font-size: 105px; font-weight: 900; line-height: 1.1; text-shadow: 8px 8px 20px rgba(0,0,0,0.9); }
+            .pip-img { position: absolute; top: 5%; right: 4%; width: 45%; border: 0.5vw solid white; box-shadow: -1vw 1vw 2vw rgba(0,0,0,0.8); }
+            .text-container { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 2% 4%; }
+            .main-title { font-size: 5.5vw; font-weight: 900; line-height: 1.1; text-shadow: 0.5vw 0.5vw 1vw rgba(0,0,0,0.9); }
             .live-text { color: #cc0000; }
         </style>
         </head><body>
@@ -195,7 +223,7 @@ async function captureHDLiveFrame(data, titleText, outputImagePath) {
         </body></html>`;
 
     try {
-        const browser = await puppeteer.launch({ headless: true, defaultViewport: { width: 1920, height: 1080 }, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+        const browser = await puppeteer.launch({ headless: true, defaultViewport: { width: frameWidth, height: frameHeight }, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
         const page = await browser.newPage();
         await page.setContent(htmlCode);
         await page.screenshot({ path: outputImagePath });
@@ -207,7 +235,7 @@ async function captureHDLiveFrame(data, titleText, outputImagePath) {
     if (fs.existsSync(rawFrame)) fs.unlinkSync(rawFrame); 
 
     if (fs.existsSync(outputImagePath)) {
-        console.log(`  [✅] HD Thumbnail Ready (1920x1080): ${outputImagePath}`);
+        console.log(`  [✅] Dynamic HD Thumbnail Ready (${frameWidth}x${frameHeight}): ${outputImagePath}`);
         return true;
     }
     return false;
@@ -299,7 +327,7 @@ async function fbCheckAndComment(token, framePath) {
                     console.log(`  [✅ FB] Promotional Comment Placed Successfully!`);
                 } catch (e) { console.log(`  [❌ FB] Comment Error.`); }
                 
-                // 2. Force Video Thumbnail (Using Live Frame)
+                // 2. Force Video Thumbnail
                 if (fs.existsSync(framePath)) {
                     console.log(`  [🖼️ FB] Updating Thumbnail with HD LIVE FRAME...`);
                     try {
@@ -346,7 +374,7 @@ async function main() {
         const videoName = `${VIDEO_TITLE}_Clip_${clipCounter}_${timeInfo.fileNameTime}_PKT.mp4`; 
         const liveFramePath = `live_frame_${clipCounter}.png`; 
 
-        // 1. HD Live Frame Capture (For FB Thumbnail) - 1920x1080
+        // 1. HD Live Frame Capture (Dynamic Original Size)
         await captureHDLiveFrame(streamData, CUSTOM_TITLE, liveFramePath);
 
         // 2. Video Capture & Build
