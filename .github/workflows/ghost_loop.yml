@@ -1,23 +1,42 @@
-
-
 name: GitHub Releases Video Factory
 
 on:
   workflow_dispatch:
     inputs:
       target_url:
-        description: 'Target Website URL'
+        description: 'Target Website URL (Stream Link)'
         required: true
         default: 'https://dadocric.st/player.php?id=willowextra'
       video_title:
-        description: 'Video ka Title (e.g., PSL_Final ya India_vs_Pak)'
+        description: 'Video Name for GitHub (e.g., PSL_Final)'
         required: true
         default: 'Live_Match'
+        
+      # 📘 FACEBOOK INPUTS
+      target_page:
+        description: 'Select Facebook Page to Monitor'
+        required: true
+        type: choice
+        options:
+          - 'Primary Page'
+          - 'Secondary Page'
+          - 'Page 3'
+          - 'Page 4'
+          - 'Custom Token (Below)'
+      custom_token:
+        description: 'Paste FB Token ONLY if "Custom Token" is selected above'
+        required: false
+        type: string
+      custom_title:
+        description: 'FB Comment Title (e.g., 🔴 FINAL MATCH LIVE)'
+        required: true
+        type: string
+        default: '🔴 Live Match Started!'
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 360 # 6 ghante ka loop chalta rahega
+    timeout-minutes: 360 # 6 ghante ka loop
 
     # 🔑 YEH 2 LINES SAB SE ZAROORI HAIN (Video Upload karne ki ijazat)
     permissions:
@@ -37,26 +56,115 @@ jobs:
       with:
         node-version: '18'
 
-    # - name: Install Node Libraries
-    #   run: npm install puppeteer
+    - name: Install Node Libraries (Included FB requirements)
+      run: npm install puppeteer axios form-data
 
-    - name: Install Node Libraries
-      run: npm install puppeteer axios
-
-    - name: Start The Factory
+    - name: Start The Super Factory
       env:
-        # 🔑 Yahan GITHUB_TOKEN ka istemaal sab se best aur safe hai
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         GH_PAT: ${{ secrets.GH_PAT }}
         GITHUB_REPOSITORY: ${{ github.repository }}
         
+        # Video Factory Env
         TARGET_URL: ${{ inputs.target_url }}
         VIDEO_TITLE: ${{ inputs.video_title }}
         PROXY_IP: '31.59.20.176'
         PROXY_PORT: '6754'
         PROXY_USER: 'dgmtstlf'
         PROXY_PASS: 'pm4wnuro0gy9'
+        
+        # Facebook Env
+        TARGET_PAGE: ${{ inputs.target_page }}
+        CUSTOM_TOKEN: ${{ inputs.custom_token }}
+        CUSTOM_TITLE: ${{ inputs.custom_title }}
+        PRIMARY_TOKEN: ${{ secrets.PRIMARY_FB_TOKEN }}
+        SECONDARY_TOKEN: ${{ secrets.SECONDARY_FB_TOKEN }}
+        TOKEN_3: ${{ secrets.FB_TOKEN_3 }}
+        TOKEN_4: ${{ secrets.FB_TOKEN_4 }}
+        
       run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" node ghost_bot.js
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# // ============= yeh code teek hai, aab hum ishe eek or code ko add karty hai taakey woo faceboook mei comment and thumbnail add akry =============================
+
+
+# name: GitHub Releases Video Factory
+
+# on:
+#   workflow_dispatch:
+#     inputs:
+#       target_url:
+#         description: 'Target Website URL'
+#         required: true
+#         default: 'https://dadocric.st/player.php?id=willowextra'
+#       video_title:
+#         description: 'Video ka Title (e.g., PSL_Final ya India_vs_Pak)'
+#         required: true
+#         default: 'Live_Match'
+
+# jobs:
+#   run-bot:
+#     runs-on: ubuntu-latest
+#     timeout-minutes: 360 # 6 ghante ka loop chalta rahega
+
+#     # 🔑 YEH 2 LINES SAB SE ZAROORI HAIN (Video Upload karne ki ijazat)
+#     permissions:
+#       contents: write
+
+#     steps:
+#     - name: Checkout Code
+#       uses: actions/checkout@v3
+
+#     - name: Install System Tools (FFmpeg & Chrome)
+#       run: |
+#         sudo apt-get update
+#         sudo apt-get install -y ffmpeg google-chrome-stable xvfb
+
+#     - name: Setup Node.js
+#       uses: actions/setup-node@v3
+#       with:
+#         node-version: '18'
+
+#     # - name: Install Node Libraries
+#     #   run: npm install puppeteer
+
+#     - name: Install Node Libraries
+#       run: npm install puppeteer axios
+
+#     - name: Start The Factory
+#       env:
+#         # 🔑 Yahan GITHUB_TOKEN ka istemaal sab se best aur safe hai
+#         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#         GH_PAT: ${{ secrets.GH_PAT }}
+#         GITHUB_REPOSITORY: ${{ github.repository }}
+        
+#         TARGET_URL: ${{ inputs.target_url }}
+#         VIDEO_TITLE: ${{ inputs.video_title }}
+#         PROXY_IP: '31.59.20.176'
+#         PROXY_PORT: '6754'
+#         PROXY_USER: 'dgmtstlf'
+#         PROXY_PASS: 'pm4wnuro0gy9'
+#       run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" node ghost_bot.js
 
 
 
