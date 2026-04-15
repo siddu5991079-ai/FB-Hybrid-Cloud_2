@@ -1,11 +1,11 @@
 const puppeteer = require('puppeteer');
 const { spawnSync, execSync } = require('child_process');
 const fs = require('fs');
-// YAHAN AXIOS ADD KIYA GAYA HAI (API UPLOAD KE LIYE)
 const axios = require('axios'); 
+const FormData = require('form-data'); // YAHAN FORM DATA ADD KIYA GAYA HAI
 
 console.log("\n" + "=".repeat(50));
-console.log("   🚀 NODE.JS HYBRID CLOUD FACTORY (GITHUB API UPLOAD EDITION)");
+console.log("   🚀 NODE.JS SUPER HYBRID CLOUD (VIDEO FACTORY + FB MONITOR)");
 console.log("=".repeat(50));
 
 // ==========================================
@@ -31,87 +31,83 @@ const PROXY_PASS = process.env.PROXY_PASS || '';
 const GH_TOKEN = process.env.GITHUB_TOKEN || process.env.GH_PAT; 
 const REPO_NAME = process.env.GITHUB_REPOSITORY;
 
+// ==========================================
+// 📘 FACEBOOK BOT SETTINGS
+// ==========================================
+const CUSTOM_TITLE = (process.env.CUSTOM_TITLE || '🔴 Live Match!').trim();
+const BASE_COMMENT = "📺 Watch Full Match Without Buffering Here: https://bulbul4u-live.xyz";
+const COMMENT_TEXT = `${CUSTOM_TITLE}\n\n${BASE_COMMENT}`;
+const COMMENT_IMG_PATH = "comment_image.jpeg";
+
+const TARGET_PAGE = process.env.TARGET_PAGE || 'Primary Page';
+const CUSTOM_TOKEN = (process.env.CUSTOM_TOKEN || '').trim();
+
+const AVAILABLE_TOKENS = {
+    'Primary Page': (process.env.PRIMARY_TOKEN || '').trim(),
+    'Secondary Page': (process.env.SECONDARY_TOKEN || '').trim(),
+    'Page 3': (process.env.TOKEN_3 || '').trim(),
+    'Page 4': (process.env.TOKEN_4 || '').trim(),
+};
+
+let ACTIVE_TOKEN = "";
+if (TARGET_PAGE === 'Custom Token (Below)') {
+    ACTIVE_TOKEN = CUSTOM_TOKEN;
+    console.log(`[📘 FB Mode] Custom Token Provided.`);
+} else {
+    ACTIVE_TOKEN = AVAILABLE_TOKENS[TARGET_PAGE] || "";
+    console.log(`[📘 FB Mode] '${TARGET_PAGE}' Selected.`);
+}
+
 let consecutiveErrors = 0;
 
 // ⏱️ TIME FORMATTER
 function formatPKT() {
     const now = new Date();
     const displayTime = now.toLocaleString('en-US', { timeZone: 'Asia/Karachi', hour12: true, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    
-    const parts = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Karachi', hour12: true, hour: '2-digit', minute: '2-digit'
-    }).formatToParts(now);
-    
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Karachi', hour12: true, hour: '2-digit', minute: '2-digit' }).formatToParts(now);
     let h = parts.find(p => p.type === 'hour').value;
     let m = parts.find(p => p.type === 'minute').value;
     let ampm = parts.find(p => p.type === 'dayPeriod').value.toUpperCase();
-    
     const fileNameTime = `${h}_${m}_${ampm}`; 
     return { displayTime, fileNameTime };
 }
 
 // ==========================================
-// 🧹 PREPARE GITHUB RELEASES (USING API)
+// 🧹 PREPARE GITHUB RELEASES
 // ==========================================
 async function setupGitHubReleaseAPI() {
     console.log(`\n[⚙️] GitHub Releases ki safai aur setup kar raha hoon...`);
-    
-    // API Setup: Release dhoondo aur create karo
     try {
         const checkRes = await axios.get(`https://api.github.com/repos/${REPO_NAME}/releases/tags/Live-Clips`, {
             headers: { 'Authorization': `token ${GH_TOKEN}`, 'Accept': 'application/vnd.github.v3+json' }
         });
-        
-        // Agar pehle se hai toh usay delete kardo
         if (checkRes.data && checkRes.data.id) {
-            await axios.delete(`https://api.github.com/repos/${REPO_NAME}/releases/${checkRes.data.id}`, {
-                headers: { 'Authorization': `token ${GH_TOKEN}` }
-            });
+            await axios.delete(`https://api.github.com/repos/${REPO_NAME}/releases/${checkRes.data.id}`, { headers: { 'Authorization': `token ${GH_TOKEN}` } });
             console.log(`  [🧹] Purani release delete ho gayi.`);
         }
-    } catch (e) {
-        // Ignored, pehle se release nahi hogi
-    }
+    } catch (e) {}
 
     try {
         await axios.post(`https://api.github.com/repos/${REPO_NAME}/releases`, {
-            tag_name: "Live-Clips",
-            name: "🔴 Live Cricket Clips",
-            body: "Yahan aapki current match ki videos aayengi."
+            tag_name: "Live-Clips", name: "🔴 Live Cricket Clips", body: "Yahan aapki current match ki videos aayengi."
         }, { headers: { 'Authorization': `token ${GH_TOKEN}`, 'Accept': 'application/vnd.github.v3+json' } });
         console.log(`  [✅] Naya Release Box tayyar hai!`);
-    } catch (e) {
-        console.log(`  [❌] Release Box setup error: ${e.response ? e.response.statusText : e.message}`);
-    }
+    } catch (e) {}
 }
 
-// ==========================================
-// 📤 UPLOAD TO GITHUB RELEASE (USING API)
-// ==========================================
 async function uploadToReleaseAPI(filePath, fileName) {
     try {
-        // Step 1: Release ID hasil karo
         const relRes = await axios.get(`https://api.github.com/repos/${REPO_NAME}/releases/tags/Live-Clips`, {
             headers: { 'Authorization': `token ${GH_TOKEN}`, 'Accept': 'application/vnd.github.v3+json' }
         });
-        const releaseId = relRes.data.id;
-        const uploadUrlBase = relRes.data.upload_url.split('{')[0]; // URL saaf karna
-
-        // Step 2: File read karke Upload karo
+        const uploadUrlBase = relRes.data.upload_url.split('{')[0];
         const fileData = fs.readFileSync(filePath);
         const finalUploadUrl = `${uploadUrlBase}?name=${fileName}`;
         
         const uploadRes = await axios.post(finalUploadUrl, fileData, {
-            headers: {
-                'Authorization': `token ${GH_TOKEN}`,
-                'Content-Type': 'video/mp4',
-                'Content-Length': fileData.length,
-                'Accept': 'application/vnd.github.v3+json'
-            },
-            maxBodyLength: Infinity,
-            maxContentLength: Infinity
+            headers: { 'Authorization': `token ${GH_TOKEN}`, 'Content-Type': 'video/mp4', 'Content-Length': fileData.length, 'Accept': 'application/vnd.github.v3+json' },
+            maxBodyLength: Infinity, maxContentLength: Infinity
         });
-
         if (uploadRes.status === 201) return true;
         return false;
     } catch (e) {
@@ -126,7 +122,6 @@ async function uploadToReleaseAPI(filePath, fileName) {
 async function getStreamData() {
     console.log(`\n[🔍 STEP 1] Puppeteer Chrome Start kar raha hoon...`);
     let browserArgs = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled', '--mute-audio', '--disable-dev-shm-usage'];
-
     if (PROXY_IP && PROXY_PORT) browserArgs.push(`--proxy-server=http://${PROXY_IP}:${PROXY_PORT}`);
 
     const browser = await puppeteer.launch({ headless: true, args: browserArgs });
@@ -138,9 +133,7 @@ async function getStreamData() {
     let streamData = null;
     page.on('request', (request) => {
         const url = request.url();
-        if (url.includes('.m3u8')) {
-            streamData = { url: url, ua: request.headers()['user-agent'] || '', cookie: request.headers()['cookie'] || '', referer: REFERER };
-        }
+        if (url.includes('.m3u8')) streamData = { url: url, ua: request.headers()['user-agent'] || '', cookie: request.headers()['cookie'] || '', referer: REFERER };
     });
 
     try {
@@ -151,20 +144,36 @@ async function getStreamData() {
             await new Promise(r => setTimeout(r, 5000));
             if (streamData) break;
         }
-    } catch (e) { console.log(`[❌ ERROR] Page load nahi ho saka.`); }
-    
+    } catch (e) {}
     await browser.close();
     
     if (streamData) {
-        console.log(`[✅ BINGO] M3U8 Link mil gaya! Ab Proxy band, aur yahi link use hoga.`);
+        console.log(`[✅ BINGO] M3U8 Link mil gaya!`);
         return streamData;
-    } else {
-        process.exit(1); 
-    }
+    } else process.exit(1); 
 }
 
 // ==========================================
-// 🎥 WORKER 1 & 2: FFMPEG ENGINE (1920x1080 Magic)
+// 📸 WORKER 0.5: CAPTURE LIVE FRAME
+// ==========================================
+function captureLiveFrame(data, framePath) {
+    console.log(`\n[📸 Step 0.5] Capturing Live Frame for Facebook Thumbnail...`);
+    const headersCmd = `User-Agent: ${data.ua}\r\nReferer: ${data.referer}\r\nCookie: ${data.cookie}\r\n`;
+    let args = ["-y", "-headers", headersCmd, "-i", data.url, "-vframes", "1", "-q:v", "2", framePath];
+    
+    try {
+        spawnSync('ffmpeg', args, { stdio: 'ignore' });
+        if (fs.existsSync(framePath)) {
+            console.log(`  [✅] Live Frame captured successfully!`);
+            return true;
+        }
+    } catch (e) {}
+    console.log(`  [❌] Failed to capture Live Frame.`);
+    return false;
+}
+
+// ==========================================
+// 🎥 WORKER 1 & 2: FFMPEG ENGINE
 // ==========================================
 function processVideo(data, rawLiveClip, finalMergedVideo) {
     console.log(`\n[🎬 Step 1] Capturing 15-second MUTE Live Clip...`);
@@ -176,8 +185,7 @@ function processVideo(data, rawLiveClip, finalMergedVideo) {
     let args1 = [
         "-y", "-thread_queue_size", "1024", "-headers", headersCmd, "-i", data.url,
         "-thread_queue_size", "1024", "-loop", "1", "-framerate", "30", "-i", "website_frame.png",
-        "-filter_complex", filterComplex1,
-        "-map", "[v_out]", "-t", "15",
+        "-filter_complex", filterComplex1, "-map", "[v_out]", "-t", "15",
         "-c:v", "libx264", "-preset", "ultrafast", "-b:v", "1500k", "-r", "30", "-an", rawLiveClip
     ];
 
@@ -185,27 +193,93 @@ function processVideo(data, rawLiveClip, finalMergedVideo) {
         spawnSync('ffmpeg', args1, { stdio: 'inherit' });
         if (fs.existsSync(rawLiveClip)) {
             console.log(`\n[🎬 Step 2] Merging Videos (1920x1080) & Adding Global Audio...`);
-            
             let filterComplex2 = `[0:v]scale=1920:1080,setsar=1,fps=30,format=yuv420p[v0]; [1:v]scale=1920:1080,setsar=1,fps=30,format=yuv420p[v1]; [v0][v1]concat=n=2:v=1:a=0[v_out]`;
-
             let args2 = [
-                "-y", 
-                "-i", rawLiveClip,             
-                "-i", "main_video.mp4",        
-                "-stream_loop", "-1", "-i", "marya_live.mp3", 
-                "-filter_complex", filterComplex2,
-                "-map", "[v_out]",             
-                "-map", "2:a",                 
-                "-shortest",                   
-                "-c:v", "libx264", "-preset", "ultrafast", "-b:v", "1500k", 
-                "-c:a", "aac", "-b:a", "128k", 
-                finalMergedVideo
+                "-y", "-i", rawLiveClip, "-i", "main_video.mp4", "-stream_loop", "-1", "-i", "marya_live.mp3", 
+                "-filter_complex", filterComplex2, "-map", "[v_out]", "-map", "2:a", "-shortest", 
+                "-c:v", "libx264", "-preset", "ultrafast", "-b:v", "1500k", "-c:a", "aac", "-b:a", "128k", finalMergedVideo
             ];
             spawnSync('ffmpeg', args2, { stdio: 'inherit' });
             return fs.existsSync(finalMergedVideo);
         }
-    } catch (e) { console.log(`[❌] Error: ${e.message}`); }
+    } catch (e) {}
     return false;
+}
+
+// ==========================================
+// 📘 FACEBOOK WORKER ENGINE
+// ==========================================
+async function fbCheckAndComment(token, framePath) {
+    try {
+        const resPage = await axios.get("https://graph.facebook.com/v18.0/me", { params: { access_token: token, fields: "id,name" } });
+        if (!resPage.data || !resPage.data.id) return;
+        const pageId = resPage.data.id;
+        
+        console.log(`\n[🔍 FB] Monitoring Page: ${resPage.data.name} (ID: ${pageId})`);
+        
+        const resPosts = await axios.get(`https://graph.facebook.com/v18.0/${pageId}/posts`, { params: { fields: "id,created_time", access_token: token } });
+        const posts = resPosts.data?.data || [];
+        const now = Date.now();
+        
+        let recentPosts = [];
+        for (const post of posts) {
+            if ((now - new Date(post.created_time).getTime()) / 1000 <= 3600) recentPosts.push(post);
+        }
+        
+        console.log(`  [📊 FB] Found ${recentPosts.length} post(s) created in the last 1 hour.`);
+        
+        for (const post of recentPosts) {
+            const postId = post.id;
+            console.log(`  [👉 FB] Checking Post ID: ${postId}`);
+            
+            const resComments = await axios.get(`https://graph.facebook.com/v18.0/${postId}/comments`, { params: { fields: "from", access_token: token } });
+            let alreadyCommented = false;
+            for (const comment of (resComments.data?.data || [])) {
+                if (comment.from && comment.from.id === pageId) { alreadyCommented = true; break; }
+            }
+            
+            if (alreadyCommented) {
+                console.log("  [✅ FB] Page has ALREADY commented on this post. Skipping.");
+            } else {
+                console.log("  [🚨 FB] Author comment NOT FOUND! Taking action...");
+                
+                // 1. Post Comment
+                try {
+                    const commentUrl = `https://graph.facebook.com/v18.0/${postId}/comments`;
+                    if (fs.existsSync(COMMENT_IMG_PATH)) {
+                        const form = new FormData();
+                        form.append('message', COMMENT_TEXT);
+                        form.append('access_token', token);
+                        form.append('source', fs.createReadStream(COMMENT_IMG_PATH));
+                        await axios.post(commentUrl, form, { headers: form.getHeaders() });
+                    } else {
+                        await axios.post(commentUrl, null, { params: { message: COMMENT_TEXT, access_token: token } });
+                    }
+                    console.log(`  [✅ FB] Promotional Comment Placed Successfully!`);
+                } catch (e) { console.log(`  [❌ FB] Comment Error.`); }
+                
+                // 2. Force Video Thumbnail (Using Live Frame)
+                if (fs.existsSync(framePath)) {
+                    console.log(`  [🖼️ FB] Updating Thumbnail with LIVE FRAME...`);
+                    try {
+                        const resAttach = await axios.get(`https://graph.facebook.com/v18.0/${postId}`, { params: { fields: "attachments", access_token: token } });
+                        const attachments = resAttach.data.attachments?.data || [];
+                        let videoId = null;
+                        if (attachments.length > 0 && attachments[0].target && attachments[0].target.id) videoId = attachments[0].target.id;
+                        
+                        if (videoId) {
+                            const formThumb = new FormData();
+                            formThumb.append('access_token', token);
+                            formThumb.append('is_preferred', 'true');
+                            formThumb.append('source', fs.createReadStream(framePath));
+                            const resThumb = await axios.post(`https://graph.facebook.com/v18.0/${videoId}/thumbnails`, formThumb, { headers: formThumb.getHeaders() });
+                            if (resThumb.data && resThumb.data.success) console.log("  [✅ FB] Live Frame set as Video Cover Photo!");
+                        }
+                    } catch (e) { console.log(`  [❌ FB] Thumbnail Error.`); }
+                }
+            }
+        }
+    } catch (e) { console.log(`  [❌ FB] API Error.`); }
 }
 
 // ==========================================
@@ -224,55 +298,377 @@ async function main() {
         const timeInfo = formatPKT();
 
         console.log(`\n${"-".repeat(50)}`);
-        console.log(`--- 🔄 STARTING VIDEO CYCLE #${clipCounter} ---`);
+        console.log(`--- 🔄 STARTING CYCLE #${clipCounter} ---`);
         console.log(`${"-".repeat(50)}`);
 
         const rawLiveClip = `raw_live.mp4`;
         const videoName = `${VIDEO_TITLE}_Clip_${clipCounter}_${timeInfo.fileNameTime}_PKT.mp4`; 
+        const liveFramePath = `live_frame_${clipCounter}.jpg`;
 
+        // 1. Live Frame Capture (For FB Thumbnail)
+        captureLiveFrame(streamData, liveFramePath);
+
+        // 2. Video Capture & Build
         const success = processVideo(streamData, rawLiveClip, videoName);
 
         if (success) {
-            console.log(`\n[🚀 Upload] Video ko GitHub API ke zariye Releases mein daal raha hoon...`);
-            
-            // Yahan hum API function call kar rahe hain
+            console.log(`\n[🚀 Upload] Video ko GitHub Releases mein daal raha hoon...`);
             const isUploaded = await uploadToReleaseAPI(videoName, videoName);
             
             if (isUploaded) {
-                const downloadLink = `https://github.com/${REPO_NAME}/releases/download/Live-Clips/${videoName}`;
-                
-                console.log(`\n=========================================================`);
-                console.log(`🎉 VIDEO IS LIVE ON GITHUB RELEASES! (YouTube 1920x1080)`);
-                console.log(`⏰ Time: ${timeInfo.displayTime} PKT`);
-                console.log(`👉 Direct Download Link:`);
-                console.log(`${downloadLink}`);
-                console.log(`(Aap apne Mobile se repository ke 'Releases' tab mein ja kar bhi download kar sakte hain!)`);
-                console.log(`=========================================================\n`);
-            } else {
-                console.log(`[❌] Upload Failed via API.`);
+                console.log(`\n🎉 VIDEO IS LIVE ON GITHUB RELEASES! (YouTube 1920x1080)`);
+                console.log(`👉 Link: https://github.com/${REPO_NAME}/releases/download/Live-Clips/${videoName}`);
             }
 
             if (fs.existsSync(rawLiveClip)) fs.unlinkSync(rawLiveClip);
             if (fs.existsSync(videoName)) fs.unlinkSync(videoName);
             consecutiveErrors = 0;
         } else {
-            console.log(`  [❌] Pipeline failed.`);
             consecutiveErrors++;
-            
             if (consecutiveErrors >= 2) {
-                console.log(`[⚠️] Lagta hai M3U8 link expire ho gaya hai. Dobara fetch kar raha hoon...`);
                 streamData = await getStreamData();
                 consecutiveErrors = 0;
             }
         }
         
-        console.log(`[⏳] 3 Minute ka wait kar raha hoon aglay clip ke liye...`);
-        await new Promise(r => setTimeout(r, 180000)); 
+        // ==========================================
+        // ⏳ SMART WAIT TIME + FACEBOOK MONITOR
+        // ==========================================
+        console.log(`\n[⏳] 3 Minute ka wait shuru... Is dauran Facebook Worker apna kaam karega!`);
+        const waitStartTime = Date.now();
+
+        if (ACTIVE_TOKEN) {
+            // Is Function ko Live Frame de rahe hain taake wo thumbnail ban sake
+            await fbCheckAndComment(ACTIVE_TOKEN, liveFramePath);
+        } else {
+            console.log(`  [⚠️] Facebook Token missing, skipping FB Monitor.`);
+        }
+
+        // Frame ka kaam khatam, isay delete kar dein
+        if (fs.existsSync(liveFramePath)) fs.unlinkSync(liveFramePath);
+
+        const timeSpentInFB = Date.now() - waitStartTime;
+        // Total Wait: 180,000 ms (3 Minutes). Usme se FB ka time nikal diya.
+        let remainingWait = 180000 - timeSpentInFB;
+        
+        // 10 Second safe margin jesa aapne manga tha
+        if (remainingWait < 10000) remainingWait = 10000; 
+
+        console.log(`[💤] FB Scan Done. Aglay clip ke liye ${Math.round(remainingWait/1000)} seconds rest kar raha hoon...`);
+        await new Promise(r => setTimeout(r, remainingWait)); 
         clipCounter++;
     }
 }
 
 main();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ============= yeh code teek hai, aab hum ishe eek or code ko add karty hai taakey woo faceboook mei comment and thumbnail add akry =============================
+
+
+// const puppeteer = require('puppeteer');
+// const { spawnSync, execSync } = require('child_process');
+// const fs = require('fs');
+// // YAHAN AXIOS ADD KIYA GAYA HAI (API UPLOAD KE LIYE)
+// const axios = require('axios'); 
+
+// console.log("\n" + "=".repeat(50));
+// console.log("   🚀 NODE.JS HYBRID CLOUD FACTORY (GITHUB API UPLOAD EDITION)");
+// console.log("=".repeat(50));
+
+// // ==========================================
+// // ⚙️ SETTINGS & ENVIRONMENT VARIABLES
+// // ==========================================
+// const START_TIME = Date.now();
+// const END_TIME_LIMIT_MS = (5 * 60 * 60 + 50 * 60) * 1000; 
+
+// const TARGET_WEBSITE = process.env.TARGET_URL || "https://bhalocast.com/atoplay.php?v=wextres&hello=m1lko&expires=123456";
+// const REFERER = "https://bhalocast.com/";
+
+// const VIDEO_TITLE = (process.env.VIDEO_TITLE || "Live_Match")
+//     .replace(/[^\w\s-]/g, '') 
+//     .trim()
+//     .replace(/\s+/g, '_');
+
+// const PROXY_IP = process.env.PROXY_IP || '';
+// const PROXY_PORT = process.env.PROXY_PORT || '';
+// const PROXY_USER = process.env.PROXY_USER || '';
+// const PROXY_PASS = process.env.PROXY_PASS || '';
+
+// // GitHub API Token
+// const GH_TOKEN = process.env.GITHUB_TOKEN || process.env.GH_PAT; 
+// const REPO_NAME = process.env.GITHUB_REPOSITORY;
+
+// let consecutiveErrors = 0;
+
+// // ⏱️ TIME FORMATTER
+// function formatPKT() {
+//     const now = new Date();
+//     const displayTime = now.toLocaleString('en-US', { timeZone: 'Asia/Karachi', hour12: true, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    
+//     const parts = new Intl.DateTimeFormat('en-US', {
+//         timeZone: 'Asia/Karachi', hour12: true, hour: '2-digit', minute: '2-digit'
+//     }).formatToParts(now);
+    
+//     let h = parts.find(p => p.type === 'hour').value;
+//     let m = parts.find(p => p.type === 'minute').value;
+//     let ampm = parts.find(p => p.type === 'dayPeriod').value.toUpperCase();
+    
+//     const fileNameTime = `${h}_${m}_${ampm}`; 
+//     return { displayTime, fileNameTime };
+// }
+
+// // ==========================================
+// // 🧹 PREPARE GITHUB RELEASES (USING API)
+// // ==========================================
+// async function setupGitHubReleaseAPI() {
+//     console.log(`\n[⚙️] GitHub Releases ki safai aur setup kar raha hoon...`);
+    
+//     // API Setup: Release dhoondo aur create karo
+//     try {
+//         const checkRes = await axios.get(`https://api.github.com/repos/${REPO_NAME}/releases/tags/Live-Clips`, {
+//             headers: { 'Authorization': `token ${GH_TOKEN}`, 'Accept': 'application/vnd.github.v3+json' }
+//         });
+        
+//         // Agar pehle se hai toh usay delete kardo
+//         if (checkRes.data && checkRes.data.id) {
+//             await axios.delete(`https://api.github.com/repos/${REPO_NAME}/releases/${checkRes.data.id}`, {
+//                 headers: { 'Authorization': `token ${GH_TOKEN}` }
+//             });
+//             console.log(`  [🧹] Purani release delete ho gayi.`);
+//         }
+//     } catch (e) {
+//         // Ignored, pehle se release nahi hogi
+//     }
+
+//     try {
+//         await axios.post(`https://api.github.com/repos/${REPO_NAME}/releases`, {
+//             tag_name: "Live-Clips",
+//             name: "🔴 Live Cricket Clips",
+//             body: "Yahan aapki current match ki videos aayengi."
+//         }, { headers: { 'Authorization': `token ${GH_TOKEN}`, 'Accept': 'application/vnd.github.v3+json' } });
+//         console.log(`  [✅] Naya Release Box tayyar hai!`);
+//     } catch (e) {
+//         console.log(`  [❌] Release Box setup error: ${e.response ? e.response.statusText : e.message}`);
+//     }
+// }
+
+// // ==========================================
+// // 📤 UPLOAD TO GITHUB RELEASE (USING API)
+// // ==========================================
+// async function uploadToReleaseAPI(filePath, fileName) {
+//     try {
+//         // Step 1: Release ID hasil karo
+//         const relRes = await axios.get(`https://api.github.com/repos/${REPO_NAME}/releases/tags/Live-Clips`, {
+//             headers: { 'Authorization': `token ${GH_TOKEN}`, 'Accept': 'application/vnd.github.v3+json' }
+//         });
+//         const releaseId = relRes.data.id;
+//         const uploadUrlBase = relRes.data.upload_url.split('{')[0]; // URL saaf karna
+
+//         // Step 2: File read karke Upload karo
+//         const fileData = fs.readFileSync(filePath);
+//         const finalUploadUrl = `${uploadUrlBase}?name=${fileName}`;
+        
+//         const uploadRes = await axios.post(finalUploadUrl, fileData, {
+//             headers: {
+//                 'Authorization': `token ${GH_TOKEN}`,
+//                 'Content-Type': 'video/mp4',
+//                 'Content-Length': fileData.length,
+//                 'Accept': 'application/vnd.github.v3+json'
+//             },
+//             maxBodyLength: Infinity,
+//             maxContentLength: Infinity
+//         });
+
+//         if (uploadRes.status === 201) return true;
+//         return false;
+//     } catch (e) {
+//         console.log(`[❌] Upload Failed Details:`, e.response ? e.response.data : e.message);
+//         return false;
+//     }
+// }
+
+// // ==========================================
+// // 🔍 WORKER 0: GET M3U8 LINK
+// // ==========================================
+// async function getStreamData() {
+//     console.log(`\n[🔍 STEP 1] Puppeteer Chrome Start kar raha hoon...`);
+//     let browserArgs = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled', '--mute-audio', '--disable-dev-shm-usage'];
+
+//     if (PROXY_IP && PROXY_PORT) browserArgs.push(`--proxy-server=http://${PROXY_IP}:${PROXY_PORT}`);
+
+//     const browser = await puppeteer.launch({ headless: true, args: browserArgs });
+//     const page = await browser.newPage();
+
+//     if (PROXY_USER && PROXY_PASS) await page.authenticate({ username: PROXY_USER, password: PROXY_PASS });
+//     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36');
+
+//     let streamData = null;
+//     page.on('request', (request) => {
+//         const url = request.url();
+//         if (url.includes('.m3u8')) {
+//             streamData = { url: url, ua: request.headers()['user-agent'] || '', cookie: request.headers()['cookie'] || '', referer: REFERER };
+//         }
+//     });
+
+//     try {
+//         console.log(`[🌐] Target URL par ja raha hoon (Proxy on)...`);
+//         await page.goto(TARGET_WEBSITE, { waitUntil: 'networkidle2', timeout: 60000 });
+//         await page.click('body').catch(() => {});
+//         for (let i = 1; i <= 3; i++) {
+//             await new Promise(r => setTimeout(r, 5000));
+//             if (streamData) break;
+//         }
+//     } catch (e) { console.log(`[❌ ERROR] Page load nahi ho saka.`); }
+    
+//     await browser.close();
+    
+//     if (streamData) {
+//         console.log(`[✅ BINGO] M3U8 Link mil gaya! Ab Proxy band, aur yahi link use hoga.`);
+//         return streamData;
+//     } else {
+//         process.exit(1); 
+//     }
+// }
+
+// // ==========================================
+// // 🎥 WORKER 1 & 2: FFMPEG ENGINE (1920x1080 Magic)
+// // ==========================================
+// function processVideo(data, rawLiveClip, finalMergedVideo) {
+//     console.log(`\n[🎬 Step 1] Capturing 15-second MUTE Live Clip...`);
+//     const headersCmd = `User-Agent: ${data.ua}\r\nReferer: ${data.referer}\r\nCookie: ${data.cookie}\r\n`;
+//     const topText = "Enter this on Google\\: bulbul4u-live.xyz";
+    
+//     let filterComplex1 = `[0:v]scale=1064:565[pip]; [1:v]scale=1080:924[bg_fixed]; [bg_fixed][pip]overlay=0:250[bg_pip]; [bg_pip]boxblur=15:5[blurred_bg]; [blurred_bg]drawtext=text='${topText}':x=(w-text_w)/2:y=h-110:fontsize=50:fontcolor=white:box=1:boxcolor=red@0.8:borderw=2:bordercolor=black[v_drawn]; [v_drawn]scale=1920:1080,setsar=1,fps=30[v_out]`;
+
+//     let args1 = [
+//         "-y", "-thread_queue_size", "1024", "-headers", headersCmd, "-i", data.url,
+//         "-thread_queue_size", "1024", "-loop", "1", "-framerate", "30", "-i", "website_frame.png",
+//         "-filter_complex", filterComplex1,
+//         "-map", "[v_out]", "-t", "15",
+//         "-c:v", "libx264", "-preset", "ultrafast", "-b:v", "1500k", "-r", "30", "-an", rawLiveClip
+//     ];
+
+//     try {
+//         spawnSync('ffmpeg', args1, { stdio: 'inherit' });
+//         if (fs.existsSync(rawLiveClip)) {
+//             console.log(`\n[🎬 Step 2] Merging Videos (1920x1080) & Adding Global Audio...`);
+            
+//             let filterComplex2 = `[0:v]scale=1920:1080,setsar=1,fps=30,format=yuv420p[v0]; [1:v]scale=1920:1080,setsar=1,fps=30,format=yuv420p[v1]; [v0][v1]concat=n=2:v=1:a=0[v_out]`;
+
+//             let args2 = [
+//                 "-y", 
+//                 "-i", rawLiveClip,             
+//                 "-i", "main_video.mp4",        
+//                 "-stream_loop", "-1", "-i", "marya_live.mp3", 
+//                 "-filter_complex", filterComplex2,
+//                 "-map", "[v_out]",             
+//                 "-map", "2:a",                 
+//                 "-shortest",                   
+//                 "-c:v", "libx264", "-preset", "ultrafast", "-b:v", "1500k", 
+//                 "-c:a", "aac", "-b:a", "128k", 
+//                 finalMergedVideo
+//             ];
+//             spawnSync('ffmpeg', args2, { stdio: 'inherit' });
+//             return fs.existsSync(finalMergedVideo);
+//         }
+//     } catch (e) { console.log(`[❌] Error: ${e.message}`); }
+//     return false;
+// }
+
+// // ==========================================
+// // 🚀 MAIN LOOP (THE BRAIN)
+// // ==========================================
+// async function main() {
+//     await setupGitHubReleaseAPI(); 
+
+//     let streamData = await getStreamData();
+//     let clipCounter = 1;
+
+//     while (true) {
+//         const elapsedTimeMs = Date.now() - START_TIME;
+//         if (elapsedTimeMs > END_TIME_LIMIT_MS) break;
+
+//         const timeInfo = formatPKT();
+
+//         console.log(`\n${"-".repeat(50)}`);
+//         console.log(`--- 🔄 STARTING VIDEO CYCLE #${clipCounter} ---`);
+//         console.log(`${"-".repeat(50)}`);
+
+//         const rawLiveClip = `raw_live.mp4`;
+//         const videoName = `${VIDEO_TITLE}_Clip_${clipCounter}_${timeInfo.fileNameTime}_PKT.mp4`; 
+
+//         const success = processVideo(streamData, rawLiveClip, videoName);
+
+//         if (success) {
+//             console.log(`\n[🚀 Upload] Video ko GitHub API ke zariye Releases mein daal raha hoon...`);
+            
+//             // Yahan hum API function call kar rahe hain
+//             const isUploaded = await uploadToReleaseAPI(videoName, videoName);
+            
+//             if (isUploaded) {
+//                 const downloadLink = `https://github.com/${REPO_NAME}/releases/download/Live-Clips/${videoName}`;
+                
+//                 console.log(`\n=========================================================`);
+//                 console.log(`🎉 VIDEO IS LIVE ON GITHUB RELEASES! (YouTube 1920x1080)`);
+//                 console.log(`⏰ Time: ${timeInfo.displayTime} PKT`);
+//                 console.log(`👉 Direct Download Link:`);
+//                 console.log(`${downloadLink}`);
+//                 console.log(`(Aap apne Mobile se repository ke 'Releases' tab mein ja kar bhi download kar sakte hain!)`);
+//                 console.log(`=========================================================\n`);
+//             } else {
+//                 console.log(`[❌] Upload Failed via API.`);
+//             }
+
+//             if (fs.existsSync(rawLiveClip)) fs.unlinkSync(rawLiveClip);
+//             if (fs.existsSync(videoName)) fs.unlinkSync(videoName);
+//             consecutiveErrors = 0;
+//         } else {
+//             console.log(`  [❌] Pipeline failed.`);
+//             consecutiveErrors++;
+            
+//             if (consecutiveErrors >= 2) {
+//                 console.log(`[⚠️] Lagta hai M3U8 link expire ho gaya hai. Dobara fetch kar raha hoon...`);
+//                 streamData = await getStreamData();
+//                 consecutiveErrors = 0;
+//             }
+//         }
+        
+//         console.log(`[⏳] 3 Minute ka wait kar raha hoon aglay clip ke liye...`);
+//         await new Promise(r => setTimeout(r, 180000)); 
+//         clipCounter++;
+//     }
+// }
+
+// main();
 
 
 
